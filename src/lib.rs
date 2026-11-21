@@ -1,0 +1,13 @@
+pub mod cli;
+pub mod color;
+pub mod config;
+pub mod doctor;
+pub mod encode;
+pub mod install;
+pub mod logging;
+pub mod plugin;
+pub mod raw_client;
+pub mod render;
+pub mod sizetest;
+pub mod status;
+pub mod striptest;
