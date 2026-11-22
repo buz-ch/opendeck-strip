@@ -269,6 +269,8 @@ The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFI
 | `line_height` | 1.15 | Line height factor, at least 0.8 |
 | `padding` | 4.0 | Inner padding in pixels |
 | `word_wrap` | false | Wrap at spaces |
+| `strip_uniform_size` | false | Strip segments that auto-fit all use the smallest size any of them needs, instead of one size each |
+| `strip_uniform_skip_first` | false | With `strip_uniform_size`: segment 1 keeps its own size and is left out of the shared one |
 | `align` | `center` | `left`, `center` or `right` |
 | `valign` | `middle` | `top`, `middle` or `bottom` |
 | `bar_color` | `#55ccff` | Progress bar fill |
@@ -287,6 +289,12 @@ opendeck-strip set labels 0
 ```
 
 `labels` accepts `1`, `0`, `true`, `false`, `yes`, `no`, `on` or `off`.
+
+### Segment font sizes
+
+Each `|` segment of a strip value auto-fits on its own, so a segment with more or longer lines gets a smaller font than its neighbours. To give the segments a common size, set `strip_uniform_size = true`: every auto-sized segment then uses the smallest size any of them needs. A segment that sets an absolute `size` is left alone.
+
+If the first segment is a different kind of panel (a counts panel with more lines, say), add `strip_uniform_skip_first = true`. Segment 1 then keeps its own size and does not pull the others down.
 
 ## Fonts
 

@@ -12,7 +12,9 @@ use crate::status::{SlotValue, Styles};
 
 use self::canvas::Canvas;
 use self::fonts::Fonts;
-use self::layout::{Align, DrawRequest, LayoutOptions, Rect, SizeSpec, VAlign, draw_text};
+use self::layout::{
+    Align, DrawRequest, LayoutOptions, Rect, SizeSpec, VAlign, auto_fit_size, draw_text,
+};
 use self::markup::{Run, parse_text, plain_of_lines, spans_to_lines};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,6 +33,8 @@ pub struct RenderConfig {
     pub line_height: f32,
     pub padding: f32,
     pub word_wrap: bool,
+    pub uniform_strip_size: bool,
+    pub uniform_skip_first: bool,
     pub align: Align,
     pub valign: VAlign,
     pub bar_color: Rgb,
@@ -47,6 +51,8 @@ impl RenderConfig {
             line_height: config.line_height,
             padding: config.padding,
             word_wrap: config.word_wrap,
+            uniform_strip_size: config.strip_uniform_size,
+            uniform_skip_first: config.strip_uniform_skip_first,
             align: Align::parse(&config.align).unwrap_or(Align::Center),
             valign: VAlign::parse(&config.valign).unwrap_or(VAlign::Middle),
             bar_color: Rgb::parse(&config.bar_color).unwrap_or(Rgb(85, 204, 255)),
@@ -239,15 +245,16 @@ impl Renderer {
                 segments.len()
             );
         }
-        for (index, segment) in segments.iter().take(segment_count).enumerate() {
-            let rect = if segment_count == 1 {
-                Rect {
-                    x: 0.0,
-                    y: 0.0,
-                    width: width as f32,
-                    height: logical_height,
+        let rects: Vec<Rect> = (0..segment_count)
+            .map(|index| {
+                if segment_count == 1 {
+                    return Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        width: width as f32,
+                        height: logical_height,
+                    };
                 }
-            } else {
                 let (x, w) = match mode {
                     crate::status::StripMode::Continuous | crate::status::StripMode::Raw => {
                         (index as f32 * 200.0, 200.0)
@@ -263,6 +270,45 @@ impl Renderer {
                     width: w,
                     height: logical_height,
                 }
+            })
+            .collect();
+
+        // Optionally give every auto-sized segment the smallest size any of
+        // them needs, so the segments do not end up with different fonts.
+        let uniform = if self.config.uniform_strip_size && segment_count > 1 {
+            let options = self.layout_options();
+            let skip_first = self.config.uniform_skip_first;
+            segments
+                .iter()
+                .zip(&rects)
+                .enumerate()
+                .filter(|(i, (s, _))| s.base_size == SizeSpec::Auto && !(skip_first && *i == 0))
+                .map(|(_, (s, r))| {
+                    let lines = if detail == Detail::TextOnly {
+                        strip_backgrounds(&s.lines)
+                    } else {
+                        s.lines.clone()
+                    };
+                    let bar = detail != Detail::TextOnly && s.bar.is_some();
+                    auto_fit_size(&lines, *r, bar, &options, &self.fonts)
+                })
+                .reduce(f32::min)
+        } else {
+            None
+        };
+
+        for (index, (segment, rect)) in segments.iter().take(segment_count).zip(rects).enumerate() {
+            let pinned;
+            let keep_own = self.config.uniform_skip_first && index == 0;
+            let segment = match uniform {
+                Some(px) if segment.base_size == SizeSpec::Auto && !keep_own => {
+                    pinned = SlotSpec {
+                        base_size: SizeSpec::Px(px),
+                        ..segment.clone()
+                    };
+                    &pinned
+                }
+                _ => segment,
             };
             truncated |= self.draw_segment(&mut canvas, segment, rect, detail);
         }
@@ -288,14 +334,8 @@ impl Renderer {
         Rendered { images, truncated }
     }
 
-    fn draw_segment(
-        &self,
-        canvas: &mut Canvas,
-        spec: &SlotSpec,
-        rect: Rect,
-        detail: Detail,
-    ) -> bool {
-        let options = LayoutOptions {
+    fn layout_options(&self) -> LayoutOptions {
+        LayoutOptions {
             min_size: self.config.min_size,
             max_size: self.config.max_size,
             line_height: self.config.line_height,
@@ -303,7 +343,17 @@ impl Renderer {
             word_wrap: self.config.word_wrap,
             default_align: self.config.align,
             default_valign: self.config.valign,
-        };
+        }
+    }
+
+    fn draw_segment(
+        &self,
+        canvas: &mut Canvas,
+        spec: &SlotSpec,
+        rect: Rect,
+        detail: Detail,
+    ) -> bool {
+        let options = self.layout_options();
         let bar = if detail == Detail::TextOnly {
             None
         } else {
@@ -696,6 +746,48 @@ pub fn styled_value(text: impl Into<String>, color: Option<Rgb>, bg: Option<Rgb>
 mod tests {
     use super::*;
     use crate::status::StripMode;
+
+    fn strip_frame(uniform: bool, text: &str) -> image::RgbImage {
+        strip_frame_with(uniform, false, text)
+    }
+
+    fn strip_frame_with(uniform: bool, skip_first: bool, text: &str) -> image::RgbImage {
+        let mut r = Renderer::embedded();
+        r.config.uniform_strip_size = uniform;
+        r.config.uniform_skip_first = skip_first;
+        let value = SlotValue::Text(text.to_owned());
+        r.render_strip(&value, StripMode::Raw, 0, Detail::Full)
+            .images
+            .remove(0)
+    }
+
+    fn first_segment(frame: &image::RgbImage) -> Vec<u8> {
+        image::imageops::crop_imm(frame, 0, 0, 200, 128)
+            .to_image()
+            .into_raw()
+    }
+
+    #[test]
+    fn uniform_size_shrinks_short_segments_to_the_longest() {
+        let text = "Hi|a considerably longer second segment of text";
+        let independent = first_segment(&strip_frame(false, text));
+        let uniform = first_segment(&strip_frame(true, text));
+        assert_ne!(independent, uniform, "short segment keeps its own size");
+        // Equal content needs equal sizes, so the switch changes nothing.
+        let same = "Hi|Hi";
+        assert_eq!(
+            first_segment(&strip_frame(false, same)),
+            first_segment(&strip_frame(true, same))
+        );
+    }
+
+    #[test]
+    fn uniform_size_can_leave_the_first_segment_alone() {
+        let text = "Hi|a considerably longer second segment|another long second segment";
+        let independent = first_segment(&strip_frame(false, text));
+        let skipped = first_segment(&strip_frame_with(true, true, text));
+        assert_eq!(independent, skipped, "segment 1 keeps its own size");
+    }
 
     #[test]
     fn ruler_bands_run_inward_from_every_edge() {

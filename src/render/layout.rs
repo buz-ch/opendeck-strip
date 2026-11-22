@@ -126,6 +126,44 @@ struct Measured {
     max_size: f32,
 }
 
+fn bar_height_for(rect: Rect, has_bar: bool) -> f32 {
+    if has_bar {
+        (rect.height * 0.10).max(3.0)
+    } else {
+        0.0
+    }
+}
+
+fn inner_rect(rect: Rect, bar_height: f32, padding: f32) -> Rect {
+    Rect {
+        x: rect.x + padding,
+        y: rect.y + padding,
+        width: (rect.width - padding * 2.0).max(1.0),
+        height: (rect.height - padding * 2.0 - bar_height).max(1.0),
+    }
+}
+
+/// The font size automatic fitting would pick for `lines` in `rect`, without
+/// drawing. Lets a caller give several boxes one common size.
+pub fn auto_fit_size(
+    lines: &[Vec<Run>],
+    rect: Rect,
+    has_bar: bool,
+    options: &LayoutOptions,
+    fonts: &Fonts,
+) -> f32 {
+    let inner = inner_rect(rect, bar_height_for(rect, has_bar), options.padding);
+    fit(
+        lines,
+        SizeSpec::Auto,
+        &inner,
+        options.word_wrap,
+        options,
+        fonts,
+    )
+    .0
+}
+
 pub fn draw_text(
     canvas: &mut Canvas,
     rect: Rect,
@@ -133,17 +171,8 @@ pub fn draw_text(
     fonts: &Fonts,
 ) -> DrawResult {
     let padding = request.options.padding;
-    let bar_height = if request.bar.is_some() {
-        (rect.height * 0.10).max(3.0)
-    } else {
-        0.0
-    };
-    let inner = Rect {
-        x: rect.x + padding,
-        y: rect.y + padding,
-        width: (rect.width - padding * 2.0).max(1.0),
-        height: (rect.height - padding * 2.0 - bar_height).max(1.0),
-    };
+    let bar_height = bar_height_for(rect, request.bar.is_some());
+    let inner = inner_rect(rect, bar_height, padding);
 
     let (size, mut lines, mut truncated) = fit(
         request.lines,

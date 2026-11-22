@@ -30,6 +30,10 @@ pub struct Config {
 
     pub strip_mode: String,
     pub strip_gap: u32,
+    /// Give all strip segments the smallest size automatic fitting picked.
+    pub strip_uniform_size: bool,
+    /// With `strip_uniform_size`: leave segment 1 (e.g. a counts panel) out of the shared size.
+    pub strip_uniform_skip_first: bool,
     pub max_jpeg_bytes: usize,
     pub redraw_hz: f32,
     /// AKP05 raw strip socket for `strip_mode = raw`; default: found automatically.
@@ -62,6 +66,8 @@ impl Default for Config {
             bar_bg: "#202830".to_owned(),
             strip_mode: "continuous".to_owned(),
             strip_gap: 28,
+            strip_uniform_size: false,
+            strip_uniform_skip_first: false,
             max_jpeg_bytes: 9000,
             redraw_hz: 2.0,
             raw_socket: None,
@@ -127,6 +133,8 @@ impl Config {
                 "BAR_BG" => set(&mut self.bar_bg, value),
                 "STRIP_MODE" => set(&mut self.strip_mode, value),
                 "STRIP_GAP" => set_parse(&mut self.strip_gap, value),
+                "STRIP_UNIFORM_SIZE" => set_parse(&mut self.strip_uniform_size, value),
+                "STRIP_UNIFORM_SKIP_FIRST" => set_parse(&mut self.strip_uniform_skip_first, value),
                 "MAX_JPEG_BYTES" => set_parse(&mut self.max_jpeg_bytes, value),
                 "REDRAW_HZ" => set_parse(&mut self.redraw_hz, value),
                 "RAW_SOCKET" => self.raw_socket = Some(value.into()),
