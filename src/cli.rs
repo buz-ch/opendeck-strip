@@ -15,7 +15,6 @@ use serde_json::{Value, json};
 use crate::config::Config;
 use crate::doctor;
 use crate::encode;
-use crate::frame::{self, ParseError};
 use crate::install;
 use crate::raw_client;
 use crate::render::markup::escape_markup;
@@ -23,6 +22,7 @@ use crate::render::{Detail, Renderer, continuous_preview, raw_frame, tiles_previ
 use crate::sizetest;
 use crate::status::{self, SlotValue, Status, StripMode, parse_bool};
 use crate::striptest;
+use crate::writer::{self, Handler, View};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -59,13 +59,16 @@ enum Commands {
         #[arg(allow_hyphen_values = true)]
         slots: Vec<String>,
     },
-    /// Apply deck frames from stdin (zj-strip-bridge `zjsb.follow -a view=deck`)
+    /// Apply a zj-strip-bridge stream from stdin
     Apply {
         /// Clear the owned slots if no line arrives for this many seconds
         #[arg(long, value_parser = positive_secs)]
         idle_clear: Option<u64>,
+        /// `state`: complete documents rendered here (default); `deck`: legacy frames
+        #[arg(long, value_enum, default_value_t = View::State)]
+        view: View,
     },
-    /// Follow the deck stream of a zj-strip-bridge plugin and apply its frames
+    /// Follow the zj-strip-bridge stream of a session and apply it
     Follow {
         /// Zellij session; default: $ZELLIJ_SESSION_NAME if live, else the first live one
         #[arg(long)]
@@ -85,9 +88,12 @@ enum Commands {
         /// Clear the owned slots on SIGTERM or SIGINT
         #[arg(long)]
         clear_on_exit: bool,
-        /// Read until the first end of stream, then exit (0 if a frame was applied, else 1)
+        /// Read until the first end of stream, then exit (0 if a status write happened, else 1)
         #[arg(long)]
         once: bool,
+        /// `state`: complete documents rendered here (default); `deck`: legacy frames
+        #[arg(long, value_enum, default_value_t = View::State)]
+        view: View,
     },
     /// Print the status file path this shell would use
     Where,
@@ -222,7 +228,7 @@ pub fn run() -> Result<i32> {
             clear(&slots)?;
             Ok(0)
         }
-        Commands::Apply { idle_clear } => apply(idle_clear.map(Duration::from_secs)),
+        Commands::Apply { idle_clear, view } => apply(idle_clear.map(Duration::from_secs), view),
         Commands::Follow {
             session,
             zellij,
@@ -231,6 +237,7 @@ pub fn run() -> Result<i32> {
             grace_secs,
             clear_on_exit,
             once,
+            view,
         } => crate::follow::run(crate::follow::Options {
             session,
             zellij: zellij.unwrap_or_else(|| PathBuf::from("zellij")),
@@ -239,6 +246,7 @@ pub fn run() -> Result<i32> {
             grace: Duration::from_secs(grace_secs),
             clear_on_exit,
             once,
+            view,
         }),
         Commands::Where => {
             println!("{}", status::status_path().display());
@@ -623,12 +631,15 @@ fn positive_secs(text: &str) -> Result<u64, String> {
     }
 }
 
-fn apply(idle_clear: Option<Duration>) -> Result<i32> {
+fn apply(idle_clear: Option<Duration>, view: View) -> Result<i32> {
+    let path = status::status_path();
+    let config = Config::load();
+    let mut handler = writer::handler(view, &config, &path, OnGap::Warn);
     let end = run_stream(
         io::stdin(),
+        &mut *handler,
         idle_clear,
         OnIdle::Continue,
-        OnGap::Warn,
         None,
         &mut Stream::new(),
     )?;
@@ -651,11 +662,12 @@ pub(crate) enum StreamEnd {
     Stopped,
 }
 
-/// What a gap in `seq` means to the caller. A delta cannot rebuild what was lost,
-/// and treating one as full would delete owned slots, so neither caller does that.
+/// What a gap in `seq` means to a caller. A deck delta cannot rebuild what was
+/// lost, and treating one as full would delete owned slots, so neither caller
+/// does that. A state line is a whole document, so a gap loses nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum OnGap {
-    /// `apply` has one stream only: warn and go on reading.
+    /// One stream only, or complete documents: warn and go on reading.
     Warn,
     /// `follow` ends the connection; the reconnect's first frame is full.
     Resync,
@@ -669,20 +681,17 @@ pub(crate) enum OnIdle {
     Stop,
 }
 
-/// What one deck stream remembers across the connections `follow` makes: the
-/// idle clock and the last full frame's owned slots. `seq` is tracked per
-/// connection, since each one starts at `hello`.
+/// What a stream remembers across the connections `follow` makes: the idle
+/// clock, which only a line restarts. The `seq` numbering lives in the handler,
+/// since each connection starts at `hello`.
 pub(crate) struct Stream {
     started: Instant,
     /// When the last line of any connection arrived; `None` until the first one.
     last_line: Option<Instant>,
     /// The owned slots were already cleared in the current silent stretch.
     idle_cleared: bool,
-    seq: frame::Seq,
-    pub(crate) owned: Vec<String>,
-    /// Lines received and deck frames applied since the stream started.
+    /// Lines received since the stream started.
     pub(crate) lines: usize,
-    pub(crate) frames: usize,
 }
 
 impl Stream {
@@ -691,16 +700,8 @@ impl Stream {
             started: Instant::now(),
             last_line: None,
             idle_cleared: false,
-            seq: frame::Seq::default(),
-            owned: Vec::new(),
             lines: 0,
-            frames: 0,
         }
-    }
-
-    /// A new connection numbers its lines from `hello` again; the idle clock is kept.
-    pub(crate) fn reconnected(&mut self) {
-        self.seq = frame::Seq::default();
     }
 
     fn line_arrived(&mut self) {
@@ -715,37 +716,43 @@ impl Stream {
     }
 
     /// Clear the owned slots once per silent stretch of `idle` or more. A
-    /// reconnect does not restart the clock; only a line does.
-    pub(crate) fn clear_if_idle(&mut self, path: &Path, idle: Duration) -> Result<()> {
+    /// reconnect does not restart the clock; only a line does. True when this
+    /// call cleared, so the writer can consider the slots empty.
+    pub(crate) fn clear_if_idle(
+        &mut self,
+        path: &Path,
+        idle: Duration,
+        owned: &[String],
+    ) -> Result<bool> {
         if self.idle_cleared || self.idle_for() < idle {
-            return Ok(());
+            return Ok(false);
         }
         self.idle_cleared = true;
-        if !self.owned.is_empty() {
-            clear_owned(path, &self.owned)?;
+        if !owned.is_empty() {
+            clear_owned(path, owned)?;
             log::info!(
                 "no line for {}s; cleared {} owned slot(s)",
                 idle.as_secs(),
-                self.owned.len()
+                owned.len()
             );
         }
-        Ok(())
+        Ok(true)
     }
 }
 
-/// Apply NDJSON deck frames from `reader` until end of input, a stall, a gap in
-/// `seq`, a newer protocol version or `stop`. Every frame is one atomic
-/// status-file update.
+/// Apply lines from `reader` until end of input, a stall, a gap in `seq`, a
+/// newer protocol version or `stop`, handing each line to `handler`.
 ///
-/// The reader runs in its own thread so an idle timeout and the stop flag can be
-/// observed while a pipe or terminal is quiet. `stream` is kept across calls by
-/// `follow`, so its idle clock and `seq` numbering span connections. With `stop`
-/// set the reader is polled, so a signal is seen without waiting out a long stall.
+/// The reader runs in its own thread so an idle timeout, a throttle deadline
+/// and the stop flag can be observed while a pipe or terminal is quiet.
+/// `stream` is kept across calls by `follow`, so its idle clock spans
+/// connections. With `stop` set the reader is polled, so a signal is seen
+/// without waiting out a long stall.
 pub(crate) fn run_stream<R: Read + Send + 'static>(
     reader: R,
+    handler: &mut dyn Handler,
     idle: Option<Duration>,
     on_idle: OnIdle,
-    on_gap: OnGap,
     stop: Option<&AtomicBool>,
     stream: &mut Stream,
 ) -> Result<StreamEnd> {
@@ -769,45 +776,61 @@ pub(crate) fn run_stream<R: Read + Send + 'static>(
             }
         }
     });
-    run_lines(rx, idle, on_idle, on_gap, stop, stream)
+    run_lines(rx, handler, idle, on_idle, stop, stream)
 }
 
 fn run_lines(
     rx: mpsc::Receiver<io::Result<String>>,
+    handler: &mut dyn Handler,
     idle: Option<Duration>,
     on_idle: OnIdle,
-    on_gap: OnGap,
     stop: Option<&AtomicBool>,
     stream: &mut Stream,
 ) -> Result<StreamEnd> {
     let path = status::status_path();
     // A short poll tick makes a signal visible without waiting out a long stall.
     let poll = stop.map(|_| Duration::from_millis(200));
-    let wait = match (idle, poll) {
-        (Some(idle), Some(poll)) => Some(idle.min(poll)),
-        (Some(idle), None) => Some(idle),
-        (None, Some(poll)) => Some(poll),
-        (None, None) => None,
-    };
     loop {
         if stop.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            handler.flush(Instant::now())?;
             return Ok(StreamEnd::Stopped);
+        }
+        let mut wait = match (idle, poll) {
+            (Some(idle), Some(poll)) => Some(idle.min(poll)),
+            (Some(idle), None) => Some(idle),
+            (None, Some(poll)) => Some(poll),
+            (None, None) => None,
+        };
+        // Wake at the throttle deadline even while no line arrives.
+        if let Some(deadline) = handler.deadline() {
+            let left = deadline.saturating_duration_since(Instant::now());
+            wait = Some(wait.map_or(left, |wait| wait.min(left)));
         }
         let received = match wait {
             Some(wait) => match rx.recv_timeout(wait) {
                 Ok(item) => Some(item),
                 Err(RecvTimeoutError::Timeout) => None,
-                Err(RecvTimeoutError::Disconnected) => return Ok(StreamEnd::Eof),
+                Err(RecvTimeoutError::Disconnected) => {
+                    handler.flush(Instant::now())?;
+                    return Ok(StreamEnd::Eof);
+                }
             },
             None => match rx.recv() {
                 Ok(item) => Some(item),
-                Err(_) => return Ok(StreamEnd::Eof),
+                Err(_) => {
+                    handler.flush(Instant::now())?;
+                    return Ok(StreamEnd::Eof);
+                }
             },
         };
         let Some(item) = received else {
-            if let Some(idle) = idle {
-                stream.clear_if_idle(&path, idle)?;
-                if on_idle == OnIdle::Stop && stream.idle_cleared {
+            let now = Instant::now();
+            handler.tick(now)?;
+            if let Some(idle) = idle
+                && stream.clear_if_idle(&path, idle, handler.owned())?
+            {
+                handler.cleared();
+                if on_idle == OnIdle::Stop {
                     return Ok(StreamEnd::Stall);
                 }
             }
@@ -819,38 +842,13 @@ fn run_lines(
         if line.trim().is_empty() {
             continue;
         }
-        match frame::parse_parts(line) {
-            Ok((frame, seq)) => {
-                if stream.seq.check(seq) {
-                    match on_gap {
-                        OnGap::Warn => log::warn!(
-                            "deck stream skipped or repeated a seq (got {seq:?}); a frame may be lost until the next full one"
-                        ),
-                        OnGap::Resync => {
-                            log::warn!("deck stream skipped or repeated a seq (got {seq:?})");
-                            return Ok(StreamEnd::SeqGap);
-                        }
-                    }
-                }
-                let Some(frame) = frame else {
-                    continue;
-                };
-                if frame.full {
-                    stream.owned = frame.owned.clone();
-                }
-                status::update(&path, |status| frame::apply_frame(status, &frame))?;
-                stream.frames += 1;
-            }
-            Err(ParseError::TooOld) => {
-                log::error!(
-                    "deck frame is newer than version {}; update opendeck-strip",
-                    frame::KNOWN_VERSION
-                );
-                return Ok(StreamEnd::TooOld);
-            }
-            Err(ParseError::Skip) => {
-                log::warn!("skipping unparsable deck line: {line}");
-                stream.seq.lost();
+        let now = Instant::now();
+        match handler.line(line, now, writer::epoch_ms())? {
+            writer::LineOutcome::Continue => {}
+            writer::LineOutcome::TooOld => return Ok(StreamEnd::TooOld),
+            writer::LineOutcome::SeqGap => {
+                handler.flush(now)?;
+                return Ok(StreamEnd::SeqGap);
             }
         }
     }
@@ -1165,12 +1163,23 @@ mod tests {
         assert!(matches!(
             command(&["apply", "--idle-clear", "5"]),
             Commands::Apply {
-                idle_clear: Some(5)
+                idle_clear: Some(5),
+                view: View::State,
             }
         ));
         assert!(matches!(
             command(&["apply"]),
-            Commands::Apply { idle_clear: None }
+            Commands::Apply {
+                idle_clear: None,
+                view: View::State,
+            }
+        ));
+        assert!(matches!(
+            command(&["apply", "--view", "deck"]),
+            Commands::Apply {
+                idle_clear: None,
+                view: View::Deck,
+            }
         ));
         match command(&["follow", "--session", "work", "--clear-on-exit"]) {
             Commands::Follow {
@@ -1181,6 +1190,7 @@ mod tests {
                 grace_secs,
                 clear_on_exit,
                 once,
+                view,
             } => {
                 assert_eq!(session.as_deref(), Some("work"));
                 assert_eq!(zellij, None);
@@ -1189,6 +1199,7 @@ mod tests {
                 assert_eq!(grace_secs, 10);
                 assert!(clear_on_exit);
                 assert!(!once);
+                assert_eq!(view, View::State);
             }
             other => panic!("unexpected {other:?}"),
         }
@@ -1212,7 +1223,8 @@ mod tests {
         assert!(matches!(
             command(&["apply", "--idle-clear", "1"]),
             Commands::Apply {
-                idle_clear: Some(1)
+                idle_clear: Some(1),
+                view: View::State,
             }
         ));
     }

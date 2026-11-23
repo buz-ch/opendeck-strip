@@ -172,7 +172,7 @@ fn slot_gone(value: &Value, slot: &str) -> bool {
 /// timeout has cleared the owned slots. The child's stdin is still open.
 fn apply_until_idle_clear(env: &Env, input: &str) -> std::process::Child {
     let mut child = env
-        .command(["apply", "--idle-clear", "1"])
+        .command(["apply", "--idle-clear", "1", "--view", "deck"])
         .stdin(std::process::Stdio::piped())
         .spawn()
         .expect("spawn apply");
@@ -743,7 +743,7 @@ const FULL_FRAME: &str = concat!(
 fn apply_applies_a_full_then_incremental_frame() {
     let env = Env::new();
     fs::write(&env.status, r#"{"key1_1":"K"}"#).unwrap();
-    let output = run_stdin(&env, ["apply"], FULL_FRAME);
+    let output = run_stdin(&env, ["apply", "--view", "deck"], FULL_FRAME);
     assert!(output.status.success());
     let status = env.status_json();
     assert_eq!(status["strip"], "S");
@@ -765,7 +765,7 @@ fn apply_clear_names_follow_clear_semantics() {
     .unwrap();
 
     let frame = r#"{"v":1,"type":"deck","set":{},"clear":["strip"]}"#;
-    let output = run_stdin(&env, ["apply"], frame);
+    let output = run_stdin(&env, ["apply", "--view", "deck"], frame);
     assert!(output.status.success());
 
     let status = env.status_json();
@@ -783,7 +783,7 @@ fn apply_refuses_a_newer_frame_and_leaves_the_file_alone() {
 
     let output = run_stdin(
         &env,
-        ["apply"],
+        ["apply", "--view", "deck"],
         "{\"v\":2,\"type\":\"deck\",\"full\":true,\"set\":{\"dial1\":\"changed\"}}\n",
     );
     assert_eq!(output.status.code(), Some(2));
@@ -801,7 +801,7 @@ fn apply_skips_garbage_lines_and_keeps_going() {
         r#"{"v":1,"type":"deck","set":{"dial2":"two"}}"#,
         "\n"
     );
-    let output = run_stdin(&env, ["apply"], input);
+    let output = run_stdin(&env, ["apply", "--view", "deck"], input);
     assert!(output.status.success());
     let status = env.status_json();
     assert_eq!(status["dial1"], "one");
@@ -823,7 +823,7 @@ fn apply_ignores_known_non_deck_types_and_unknown_types() {
         r#"{"v":1,"type":"something_new"}"#,
         "\n"
     );
-    let output = run_stdin(&env, ["apply"], input);
+    let output = run_stdin(&env, ["apply", "--view", "deck"], input);
     assert!(output.status.success());
     assert_eq!(env.status_text(), before);
 }
@@ -840,7 +840,7 @@ fn apply_idle_clear_removes_the_owned_slots() {
 fn zero_second_durations_are_usage_errors() {
     let env = Env::new();
     assert_eq!(
-        run_stdin(&env, ["apply", "--idle-clear", "0"], "")
+        run_stdin(&env, ["apply", "--idle-clear", "0", "--view", "deck"], "")
             .status
             .code(),
         Some(2)
@@ -930,7 +930,7 @@ fn apply_applies_a_delta_after_a_seq_gap_and_exits_zero() {
         r#"{"v":1,"type":"deck","seq":3,"full":false,"set":{"dial2":"two"}}"#,
         "\n"
     );
-    let output = run_stdin(&env, ["apply"], input);
+    let output = run_stdin(&env, ["apply", "--view", "deck"], input);
     assert_eq!(output.status.code(), Some(0));
     let status = env.status_json();
     assert_eq!(status["dial1"], "one");
@@ -949,7 +949,7 @@ fn apply_skips_a_deck_line_with_a_non_boolean_full() {
         r#"{"v":1,"type":"deck","seq":2,"full":false,"set":{"dial2":"two"}}"#,
         "\n"
     );
-    let output = run_stdin(&env, ["apply"], input);
+    let output = run_stdin(&env, ["apply", "--view", "deck"], input);
     assert_eq!(output.status.code(), Some(0));
     let status = env.status_json();
     assert!(
@@ -1011,7 +1011,7 @@ fn follow_once_applies_frames_from_a_fake_zellij() {
     write_fake_zellij(&bin, FAKE_ZELLIJ);
 
     let output = env
-        .command(["follow", "--once"])
+        .command(["follow", "--once", "--view", "deck"])
         .env("PATH", fake_path(&bin))
         .output()
         .expect("run follow");
@@ -1061,7 +1061,7 @@ fn follow_pinned_live_session_is_followed_with_the_documented_argv() {
     write_fake_zellij(&bin, FAKE_ZELLIJ);
 
     let output = env
-        .command(["follow", "--once", "--session", "work"])
+        .command(["follow", "--once", "--session", "work", "--view", "deck"])
         .env("PATH", fake_path(&bin))
         .env("FAKE_ARGV", env.path("argv"))
         .output()
@@ -1113,7 +1113,15 @@ fn follow_backs_off_while_no_line_arrives() {
     write_silent_zellij(&bin);
     let calls = env.path("calls");
     let mut child = env
-        .command(["follow", "--retry-secs", "1,3", "--stall-secs", "60"])
+        .command([
+            "follow",
+            "--view",
+            "deck",
+            "--retry-secs",
+            "1,3",
+            "--stall-secs",
+            "60",
+        ])
         .env("PATH", fake_path(&bin))
         .env("FAKE_CALLS", &calls)
         .spawn()
@@ -1160,7 +1168,15 @@ exit 1
     let calls = env.path("calls");
 
     let mut child = env
-        .command(["follow", "--stall-secs", "1", "--retry-secs", "1,2"])
+        .command([
+            "follow",
+            "--view",
+            "deck",
+            "--stall-secs",
+            "1",
+            "--retry-secs",
+            "1,2",
+        ])
         .env("PATH", fake_path(&bin))
         .env("FAKE_CALLS", &calls)
         .spawn()
@@ -1220,7 +1236,15 @@ exit 1
     let calls = env.path("calls");
 
     let mut child = env
-        .command(["follow", "--stall-secs", "2", "--retry-secs", "3,3"])
+        .command([
+            "follow",
+            "--view",
+            "deck",
+            "--stall-secs",
+            "2",
+            "--retry-secs",
+            "3,3",
+        ])
         .env("PATH", fake_path(&bin))
         .env("FAKE_CALLS", &calls)
         .spawn()
@@ -1283,7 +1307,15 @@ exit 1
     let calls = env.path("calls");
 
     let mut child = env
-        .command(["follow", "--retry-secs", "1,1", "--stall-secs", "60"])
+        .command([
+            "follow",
+            "--view",
+            "deck",
+            "--retry-secs",
+            "1,1",
+            "--stall-secs",
+            "60",
+        ])
         .env("PATH", fake_path(&bin))
         .env("FAKE_CALLS", &calls)
         .spawn()
@@ -1336,6 +1368,8 @@ exit 1
     let mut child = env
         .command([
             "follow",
+            "--view",
+            "deck",
             "--session",
             "work",
             "--grace-secs",
@@ -1398,7 +1432,7 @@ exit 1
     );
 
     let mut child = env
-        .command(["follow", "--retry-secs", "1,1"])
+        .command(["follow", "--view", "deck", "--retry-secs", "1,1"])
         .env("PATH", fake_path(&bin))
         .env("FAKE_READY", &ready)
         .spawn()
@@ -1441,7 +1475,7 @@ exit 1
 "#,
     );
     let output = env
-        .command(["follow", "--once"])
+        .command(["follow", "--once", "--view", "deck"])
         .env("PATH", fake_path(&bin))
         .output()
         .expect("run follow");
@@ -1464,7 +1498,7 @@ exit 1
 "#,
     );
     let output = env
-        .command(["follow", "--once"])
+        .command(["follow", "--once", "--view", "deck"])
         .env("PATH", fake_path(&bin))
         .output()
         .expect("run follow");
@@ -1499,7 +1533,7 @@ exit 1
 
     // The live `$ZELLIJ_SESSION_NAME` wins over the first live line ("work").
     let output = env
-        .command(["follow", "--once"])
+        .command(["follow", "--once", "--view", "deck"])
         .env("PATH", fake_path(&bin))
         .env("ZELLIJ_SESSION_NAME", "other")
         .env("FAKE_SESSION_FILE", &chosen)
@@ -1540,7 +1574,7 @@ exit 1
     );
 
     let mut child = env
-        .command(["follow", "--clear-on-exit"])
+        .command(["follow", "--view", "deck", "--clear-on-exit"])
         .env("PATH", fake_path(&bin))
         .spawn()
         .expect("spawn follow");
