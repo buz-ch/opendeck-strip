@@ -43,6 +43,20 @@ pub struct Config {
 
     /// Expect `opendeck-strip follow` to be running; `doctor` then checks for a live session.
     pub follow: bool,
+
+    /// `strip`: the 4-segment strip. `compact`: one slot (`zjsb_slot`).
+    pub zjsb_mode: String,
+    /// Compact only: `dial1`..`dial4` or `key<row>_<col>`.
+    pub zjsb_slot: String,
+    /// Clear the deck when nothing is active, instead of the idle text.
+    pub zjsb_blank_when_idle: bool,
+    /// Minimum time between two writes when following.
+    pub zjsb_min_interval_ms: u64,
+    pub zjsb_entry_template: String,
+    pub zjsb_counts_template: String,
+    pub zjsb_more_template: String,
+    pub zjsb_compact_template: String,
+    pub zjsb_idle_template: String,
 }
 
 impl Default for Config {
@@ -76,6 +90,15 @@ impl Default for Config {
             raw_socket: None,
             watch_timeout_secs: 5,
             follow: false,
+            zjsb_mode: "strip".to_owned(),
+            zjsb_slot: "dial1".to_owned(),
+            zjsb_blank_when_idle: false,
+            zjsb_min_interval_ms: 1000,
+            zjsb_entry_template: crate::zjsb::DEFAULT_ENTRY.to_owned(),
+            zjsb_counts_template: crate::zjsb::DEFAULT_COUNTS.to_owned(),
+            zjsb_more_template: crate::zjsb::DEFAULT_MORE.to_owned(),
+            zjsb_compact_template: crate::zjsb::DEFAULT_COMPACT.to_owned(),
+            zjsb_idle_template: crate::zjsb::DEFAULT_IDLE.to_owned(),
         }
     }
 }

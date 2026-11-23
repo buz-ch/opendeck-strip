@@ -1,0 +1,1 @@
+[c=grey]● 0[/c]\n[c=grey]✗ 0[/c]\n[c=grey]✓ 0[/c]\n[c=#55ccff]» 1[/c]|[b]claude[/b]\n[c=#55ccff]working[/c]\nrunning subagents

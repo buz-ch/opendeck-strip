@@ -1,0 +1,1 @@
+[c=orange]● 2[/c]\n[c=red]✗ 1[/c]\n[c=green]✓ 1[/c]\n[c=#55ccff]» 2[/c]|[b]claude[/b]\n[c=orange]needs login[/c]\nlogin expired|[b]codex[/b]\n[c=orange]needs approval[/c]\napply patch|[s=1.6][c=red]✗[/c][/s] [b]+4[/b]\n[c=red]failed[/c]

@@ -1,0 +1,1 @@
+[c=orange]● 2[/c]\n[c=red]✗ 1[/c]\n[c=green]✓ 1[/c]\n[c=#55ccff]» 1[/c]|[b]claude[/b]\n[c=orange]needs approval[/c]\n[c=grey]tab 0 pane 1 3m[/c]|[b]opencode[/b]\n[c=orange]has a question[/c]\n[c=grey]tab 0 pane 2 40s[/c]|[b]+3 more[/b]\n[c=red]failed[/c]\nsee inbox

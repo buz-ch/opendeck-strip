@@ -1,0 +1,1 @@
+[c=orange]● 1[/c]\n[c=grey]✗ 0[/c]\n[c=grey]✓ 0[/c]\n[c=grey]» 0[/c]|[b]claude[/b]\n[c=orange]needs approval[/c]\nwrite src/auth.rs

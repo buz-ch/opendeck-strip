@@ -1,0 +1,1 @@
+[b]5[/b] active\n[c=orange]2 need you[/c]\n[c=red]1 failed[/c]|● [b]claude[/b]\n[c=orange]needs approval[/c]\n[c=grey]edit src/auth.rs[/c]|● [b]opencode[/b]\n[c=orange]has a question[/c]\n[c=grey]which database should I…[/c]|[b]+3 more[/b]\n[c=red]failed[/c]\nsee inbox

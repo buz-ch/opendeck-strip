@@ -1,0 +1,1 @@
+[s=1.6][c=orange]● 2[/c][/s]\n[s=1.6][c=red]✗ 1[/c][/s]|[s=2.4][c=orange]●[/c][/s]\n[b]claude[/b]|[s=2.4][c=orange]●[/c][/s]\n[b]opencode[/b]|[b]+3 more[/b]\n[c=red]failed[/c]\nsee inbox

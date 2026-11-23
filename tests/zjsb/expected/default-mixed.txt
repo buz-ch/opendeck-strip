@@ -1,0 +1,1 @@
+[c=orange]● 2[/c]\n[c=red]✗ 1[/c]\n[c=green]✓ 1[/c]\n[c=#55ccff]» 1[/c]|[b]claude[/b]\n[c=orange]needs approval[/c]\nedit src/auth.rs|[b]opencode[/b]\n[c=orange]has a question[/c]\nwhich database should…|[b]+3 more[/b]\n[c=red]failed[/c]\nsee inbox

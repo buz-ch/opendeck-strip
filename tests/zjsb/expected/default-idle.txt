@@ -1,0 +1,1 @@
+[c=grey]● 0[/c]\n[c=grey]✗ 0[/c]\n[c=grey]✓ 0[/c]\n[c=grey]» 0[/c]|[c=#66cc88][b]All clear[/b][/c]\n[c=grey]no failures[/c]\n[c=grey]nothing running[/c]|[c=grey]waiting for agents…[/c]|

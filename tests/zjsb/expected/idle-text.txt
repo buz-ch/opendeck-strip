@@ -1,0 +1,1 @@
+[c=grey]all quiet[/c]\n0 active

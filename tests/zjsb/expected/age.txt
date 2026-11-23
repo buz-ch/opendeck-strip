@@ -1,0 +1,1 @@
+[c=orange]● 1[/c]\n[c=grey]✗ 0[/c]\n[c=green]✓ 1[/c]\n[c=#55ccff]» 1[/c]|[b]claude[/b] [c=grey]2m[/c]\n[c=orange]needs approval[/c]\nrun cargo test|[b]opencode[/b] [c=grey]1m[/c]\n[c=green]done[/c]\nPR #42 ready|[b]codex[/b] [c=grey]6s[/c]\n[c=#55ccff]working[/c]\nrefactoring parser

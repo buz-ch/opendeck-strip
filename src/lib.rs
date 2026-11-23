@@ -13,3 +13,4 @@ pub mod render;
 pub mod sizetest;
 pub mod status;
 pub mod striptest;
+pub mod zjsb;
