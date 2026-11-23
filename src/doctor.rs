@@ -34,6 +34,16 @@ pub fn run() -> Result<bool> {
         println!("  missing; the plugin will create it on the first write");
     }
 
+    if config.warnings.is_empty() {
+        println!("config: no warnings");
+    } else {
+        println!("config warnings:");
+        for warning in &config.warnings {
+            println!("  warning: {warning}");
+        }
+        warn += config.warnings.len();
+    }
+
     #[cfg(unix)]
     match open_deck_status_path() {
         Ok(Some((pid, plugin_path))) => {
