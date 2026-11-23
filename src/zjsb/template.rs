@@ -55,6 +55,9 @@ impl Template {
         for raw in normalized.split('\n') {
             lines.push(parse_line(raw, allowed)?);
         }
+        // An empty line renders nothing and is not kept, so that the empty
+        // template is `Template::default()`.
+        lines.retain(|l| !l.is_empty());
         if lines.len() > MAX_LINES {
             return Err(format!("more than {MAX_LINES} lines"));
         }
