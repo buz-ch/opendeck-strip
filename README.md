@@ -14,7 +14,7 @@ It reads everything from one JSON status file, so anything that can write a file
 - **Fills the whole strip.** Continuous mode draws one picture across the four dials with no gaps. Strip text can be split into up to four independent segments with `|`.
 - **Sends full-height frames.** In `raw` mode it renders an 800x128 frame and sends it straight to the AKP05 plugin's socket, so the strip is used edge to edge with no letterbox bands. It falls back to the standard dial-image path when the socket isn't available. `opendeck-strip raw-string "text"` renders a string (same syntax as `set strip`) as such a frame and shows it directly.
 - **Runs from scripts.** `set`, `get`, `clear`, `watch` (re-run a command every few seconds and show its output) and `where` cover everyday use.
-- **Follows a Zellij deck.** `apply` consumes `zj-strip-bridge` deck frames from a pipe and `follow` supervises that pipe, reconnecting after stalls and session restarts.
+- **Follows and renders a Zellij deck.** `follow` reads the `zj-strip-bridge` document (`view=state`) from a pipe, renders it here with `zjsb_*` templates and writes the status file; `apply` does the same for a recorded stream. `follow` reconnects after stalls and session restarts.
 - **Helps you test.** `strip-preview` renders a PNG without a device, `size-test` measures the image size the device will receive, `raw-test` shows a coloured test frame, `raw-test --ruler` shows an edge ruler, and `doctor` checks the plugin, hidraw access and the installed AKP05 build.
 
 ## Quick example
@@ -181,15 +181,18 @@ opendeck-strip strip test --seconds 30
 opendeck-strip doctor
 ```
 
-`follow` shows the deck served by `zj-strip-bridge` over `zellij pipe`. It resolves a live Zellij session, starts `zellij --session S pipe --name zjsb.follow -a view=deck`, applies the frames, and reconnects after a stall or a session restart. `--session NAME` pins a session, `--clear-on-exit` blanks the slots the plugin owns on SIGTERM or SIGINT, and `--once` stops after the first stream (exit 0 if a frame was applied, else 1). `apply` is the same reader without the supervisor; it takes frames on standard input. Set `output "pipe"` in the plugin for this setup, so that only `follow` writes the deck and the deck is cleared after a stall, even when Zellij is killed.
+`follow` shows the deck served by `zj-strip-bridge` over `zellij pipe`. It resolves a live Zellij session, starts `zellij --session S pipe --name zjsb.follow -a view=state start`, renders each document with the `zjsb_*` settings below, writes the status file, and reconnects after a stall or a session restart. `--session NAME` pins a session, `--clear-on-exit` blanks the slots the renderer owns on SIGTERM or SIGINT, and `--once` stops after the first stream (exit 0 if a write happened, else 1). `apply` is the same reader and renderer without the supervisor; it takes the stream on standard input.
+
+`--view` selects the stream: `state` (the default) reads complete version 2 documents and renders them here; `deck` is the legacy reader for deck frames from an older `pipe`-branch plugin. The new `data-only` plugin refuses `view=deck` with `unknown view`.
 
 ```sh
 opendeck-strip follow
 opendeck-strip follow --session work --clear-on-exit
-zellij --session work pipe --name zjsb.follow -a view=deck | opendeck-strip apply
+(printf 'start\n'; cat) | zellij --session work pipe --name zjsb.follow | opendeck-strip apply
+opendeck-strip apply --view deck < recorded-frames.ndjson
 ```
 
-A systemd user unit is in `examples/opendeck-strip-follow.service`. The frame format, exit codes and reconnect rules are documented in [docs/status-format.md](docs/status-format.md#following-zj-strip-bridge).
+A systemd user unit is in `examples/opendeck-strip-follow.service` (`follow --clear-on-exit`). The document, renderer, exit codes and reconnect rules are documented in [docs/status-format.md](docs/status-format.md#following-zj-strip-bridge).
 
 `watch` runs a command on an interval and shows its first four output lines. Failures and timeouts use a red error style. The command is executed directly, not through a shell, so arguments with spaces stay intact; use `sh -c` for pipes and redirection.
 
@@ -266,15 +269,12 @@ The full schema, the span object fields and the internal `@slices:<dir>#<n>` for
 
 ## Configuration
 
-The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFIG` selects another file. Every key can be overridden with an environment variable named `OPENDECK_STRIP_` plus the upper-case key, for example `OPENDECK_STRIP_STRIP_MODE=tiles`. Boolean keys (`follow`, `word_wrap`, `strip_uniform_size`, `strip_uniform_skip_first`) accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case.
+The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFIG` selects another file. Every key can be overridden with an environment variable named `OPENDECK_STRIP_` plus the upper-case key, for example `OPENDECK_STRIP_STRIP_MODE=tiles`. Boolean keys (`follow`, `word_wrap`, `strip_uniform_size`, `strip_uniform_skip_first`, `zjsb_blank_when_idle`) accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `strip_mode` | `continuous` | Initial strip mode: `continuous`, `tiles` or `raw` |
-| `strip_gap` | 28 | Tile gap in pixels, clamped to 0–32 at render time |
-| `max_jpeg_bytes` | 9000 | Size budget for the final device JPEG |
-| `redraw_hz` | 2.0 | Redraw bursts per second; raw mode redraws at least 10 per second |
-| `raw_socket` | none | AKP05 raw socket path for `strip_mode = raw`; default is found automatically |
+| `font_sans`, `font_sans_bold`, `font_sans_italic`, `font_sans_bold_italic` | embedded | Proportional font paths |
+| `font_mono`, `font_mono_bold`, `font_mono_italic`, `font_mono_bold_italic` | embedded | Monospaced font paths |
 | `default_color` | `#ffffff` | Default text colour |
 | `default_bg` | `#000000` | Default background |
 | `min_font_size` | 8.0 | Lower auto-fit limit, clamped to at least 4 |
@@ -282,18 +282,32 @@ The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFI
 | `line_height` | 1.15 | Line height factor, at least 0.8 |
 | `padding` | 4.0 | Inner padding in pixels |
 | `word_wrap` | false | Wrap at spaces |
-| `strip_uniform_size` | false | Strip segments that auto-fit all use the smallest size any of them needs, instead of one size each |
-| `strip_uniform_skip_first` | false | With `strip_uniform_size`: segment 1 keeps its own size and is left out of the shared one |
 | `align` | `center` | `left`, `center` or `right` |
 | `valign` | `middle` | `top`, `middle` or `bottom` |
 | `bar_color` | `#55ccff` | Progress bar fill |
 | `bar_bg` | `#202830` | Progress bar track |
+| `strip_mode` | `continuous` | Initial strip mode: `continuous`, `tiles` or `raw` |
+| `strip_gap` | 28 | Tile gap in pixels, clamped to 0–32 at render time |
+| `strip_uniform_size` | false | Strip segments that auto-fit all use the smallest size any of them needs, instead of one size each |
+| `strip_uniform_skip_first` | false | With `strip_uniform_size`: segment 1 keeps its own size and is left out of the shared one |
+| `max_jpeg_bytes` | 9000 | Size budget for the final device JPEG |
+| `redraw_hz` | 2.0 | Redraw bursts per second; raw mode redraws at least 10 per second |
+| `raw_socket` | none | AKP05 raw socket path for `strip_mode = raw`; default is found automatically |
 | `watch_timeout_secs` | 5 | Timeout for `watch` commands |
 | `follow` | false | Expect `follow` to run; `doctor` then checks for a live Zellij session |
-| `font_sans`, `font_sans_bold`, `font_sans_italic`, `font_sans_bold_italic` | embedded | Proportional font paths |
-| `font_mono`, `font_mono_bold`, `font_mono_italic`, `font_mono_bold_italic` | embedded | Monospaced font paths |
+| `zjsb_mode` | `strip` | `strip`: counts plus entries across the strip; `compact`: one entry in `zjsb_slot` |
+| `zjsb_slot` | `dial1` | Compact mode only: `dial1` to `dial4`, or `key<row>_<col>` with row and column 1 to 9 |
+| `zjsb_blank_when_idle` | false | Clear the owned slots when nothing is active, instead of the idle text |
+| `zjsb_min_interval_ms` | 1000 | Minimum time between two writes while following; the latest state wins |
+| `zjsb_entry_template` | see below | One deck entry |
+| `zjsb_counts_template` | see below | The counts segment |
+| `zjsb_more_template` | see below | The `+N more` segment |
+| `zjsb_compact_template` | see below | The one entry of compact mode |
+| `zjsb_idle_template` | empty | The whole strip (or compact slot) when nothing is active; empty means the counts panel plus `All clear` |
 
 The plugin reads the config once at start-up; restart OpenDeck after editing it. The status file keys `strip_mode` and `strip_gap` take precedence and apply without a restart. `labels` exists only in the status file.
+
+The parser is verbose: an unknown key, a value of the wrong type, a clamped value and an enum name it does not know each produce a warning in the log and in `doctor`. A value that cannot be used keeps that key's default, a number outside its range is clamped, and the rest of the file stays in effect; a file that is not valid TOML is reported and replaced by all defaults.
 
 Values set with `set`:
 
@@ -303,6 +317,73 @@ opendeck-strip set labels 0
 ```
 
 `labels` accepts `1`, `0`, `true`, `false`, `yes`, `no`, `on` or `off`.
+
+### Every key, as a commented block
+
+Every key is optional; a missing key keeps its default. A value that cannot be used is reported as a warning in the log and in `doctor` and that key keeps its default (a number outside its range is clamped), while the rest of the file stays in effect. Each key can also be set with `OPENDECK_STRIP_` plus its upper-case name (`OPENDECK_STRIP_ZJSB_MODE=compact`); booleans accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case. The five templates are TOML multi-line basic strings (`"""…"""`), so `\n` is a real newline and quotes need no escaping.
+
+```toml
+# font_sans = "/path/to/SourceSans3-Regular.ttf"          # proportional regular; default: embedded
+# font_sans_bold = "/path/to/SourceSans3-Bold.ttf"        # default: embedded
+# font_sans_italic = "/path/to/SourceSans3-It.ttf"        # default: embedded
+# font_sans_bold_italic = "/path/to/SourceSans3-BdIt.ttf" # default: embedded
+# font_mono = "/path/to/SourceCodePro-Regular.ttf"        # monospaced regular; default: embedded
+# font_mono_bold = "/path/to/SourceCodePro-Bold.ttf"      # default: embedded
+# font_mono_italic = "/path/to/SourceCodePro-It.ttf"      # default: embedded
+# font_mono_bold_italic = "/path/to/SourceCodePro-BdIt.ttf" # default: embedded
+
+# default_color = "#ffffff"        # text colour
+# default_bg = "#000000"           # background colour
+# min_font_size = 8.0              # lower auto-fit limit, at least 4
+# max_font_size = 96.0             # upper auto-fit limit
+# line_height = 1.15               # line height factor, at least 0.8
+# padding = 4.0                    # inner padding in pixels
+# word_wrap = false                # true | false: wrap at spaces
+# align = "center"                 # left | center | right
+# valign = "middle"                # top | middle | bottom
+# bar_color = "#55ccff"            # progress bar fill
+# bar_bg = "#202830"               # progress bar track
+
+# strip_mode = "continuous"        # continuous | tiles | raw
+# strip_gap = 28                   # tile gap in pixels, 0 to 32
+# strip_uniform_size = false       # true | false: auto-sized segments share the smallest size
+# strip_uniform_skip_first = false # true | false: segment 1 keeps its own size
+# max_jpeg_bytes = 9000            # size budget for the final device JPEG
+# redraw_hz = 2.0                  # redraw bursts per second, above 0
+# raw_socket = "/run/user/1000/opendeck-akp05/device.sock" # AKP05 raw socket; default: found automatically
+# watch_timeout_secs = 5           # timeout for `watch` commands, above 0
+# follow = false                   # true | false: `doctor` checks for a live Zellij session
+
+# zjsb_mode = "strip"              # strip | compact
+# zjsb_slot = "dial1"              # compact only: dial1..dial4 or key<row>_<col>, row and column 1 to 9
+# zjsb_blank_when_idle = false     # true | false: clear the owned slots instead of the idle text
+# zjsb_min_interval_ms = 1000      # minimum time between two writes, above 0
+# zjsb_entry_template = """
+# [b]{app|title:14}[/b]
+# [c={color}]{state_label}[/c]
+# {progress_pct|msg:22}
+# """
+# zjsb_counts_template = """
+# [c={needs_you_color}]● {needs_you}[/c]
+# [c={failed_color}]✗ {failed}[/c]
+# [c={done_color}]✓ {done}[/c]
+# [c={working_color}]» {working}[/c]
+# """
+# zjsb_more_template = """
+# [b]+{hidden} more[/b]
+# [c={color}]{state_label}[/c]
+# see inbox
+# """
+# zjsb_compact_template = """
+# [c={color}]{marker} {count}[/c]
+# {app|title:8}
+# """
+# zjsb_idle_template = ""          # empty: the counts panel plus "All clear"
+```
+
+### Migrating from the plugin
+
+The plugin's `mode`, `slot`, `blank_when_idle`, `min_interval_ms` and five template keys move here as `zjsb_mode`, `zjsb_slot`, `zjsb_blank_when_idle`, `zjsb_min_interval_ms` and the five `zjsb_*_template` keys. `output`, `bin` and the plugin-side templates are gone. A KDL `\\n` becomes a real newline in a TOML `"""…"""` string, and `\"` becomes `"`. Because the strip is now rendered from the document, `export_peers false` thins the strip as well as `entries.json`; the default `true` keeps the merged deck of every session.
 
 ### Segment font sizes
 
@@ -347,7 +428,9 @@ Never write the boot logo or any ROM data. The device SDK warns that this can br
 
 ## Development
 
-The crate is split into `cli`, `status`, `frame`, `follow`, `plugin`, `render` (`canvas`, `fonts`, `layout`, `markup`), `encode`, `sizetest`, `install`, `doctor`, `config`, `color` and `logging`.
+The crate is split into `cli`, `status`, `frame`, `follow`, `plugin`, `render` (`canvas`, `fonts`, `layout`, `markup`), `zjsb` (`document`, `template`, `examples`), `encode`, `sizetest`, `install`, `doctor`, `config`, `color` and `logging`.
+
+`preview.sh` and `preview/` render the 27 preview examples from the document fixtures in `tests/zjsb/` (scenario documents, `examples.toml`, expected strings) with the `zjsb_preview` example; `cargo test --test zjsb_golden` checks the same 27 strings byte for byte.
 
 Tests:
 
