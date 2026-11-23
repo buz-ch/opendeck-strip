@@ -302,3 +302,22 @@ fn a_state_line_carries_its_document_and_seq() {
 fn epoch_ms_is_a_plausible_epoch() {
     assert!(epoch_ms() > 1_600_000_000_000);
 }
+
+#[test]
+fn an_unchanged_compact_frame_is_dropped_too() {
+    let mut config = config();
+    config.zjsb_mode = "compact".to_owned();
+    config.zjsb_slot = "key1_2".to_owned();
+    let mut writer = Writer::new(&config);
+    let mut status = Status::empty();
+    let t0 = Instant::now();
+    let same = doc("a", "blocked", true);
+    writer.document(&mut status, &same, 0, t0);
+    assert_eq!(writer.applied(), 1);
+    writer.document(&mut status, &same, 0, t0 + INTERVAL * 10);
+    assert_eq!(
+        writer.applied(),
+        1,
+        "unchanged compact text must not be rewritten"
+    );
+}

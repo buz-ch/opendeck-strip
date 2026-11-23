@@ -129,7 +129,8 @@ impl Writer {
             owned,
             interval: Duration::from_millis(config.zjsb_min_interval_ms),
             shown: None,
-            raw_set: false,
+            // Compact never writes the strip, so it never announces raw mode.
+            raw_set: !strip,
             pending: None,
             last_write: None,
             writes: 0,
