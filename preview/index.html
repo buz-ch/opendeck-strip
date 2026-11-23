@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zj-strip-bridge previews</title>
+<style>
+  :root { --bg: #fff; --fg: #1d2127; --muted: #5b6573; --card: #f4f6f8; --line: #d8dde3; --link: #0b62c4; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171b; --fg: #e6e9ed; --muted: #9aa4b1; --card: #1d2228; --line: #2e353d; --link: #6cb2ff; }
+  }
+  body { margin: 0; padding: 24px 16px 64px; background: var(--bg); color: var(--fg);
+         font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  h2 { margin: 40px 0 4px; padding-top: 8px; border-top: 2px solid var(--line); font-size: 1.3rem; }
+  h2 small { color: var(--muted); font-weight: 400; font-size: 0.8em; }
+  h3 { margin: 0 0 4px; font-size: 1.05rem; }
+  h4 { margin: 28px 0 2px; font-size: 1.1rem; }
+  p { margin: 0 0 8px; }
+  nav { margin: 12px 0; }
+  nav a { color: var(--link); }
+  .lead, .meta { color: var(--muted); }
+  .legend { padding: 8px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; }
+  .legend p { margin: 4px 0; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; vertical-align: 2px; color: #fff; }
+  .badge.def { background: #1f7a3f; }
+  .badge.cus { background: #b25b00; }
+  section { margin-top: 16px; padding: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+  pre { margin: 6px 0; padding: 8px 10px; overflow-x: auto; background: var(--bg); border: 1px solid var(--line);
+        border-radius: 6px; font-size: 0.85rem; }
+  code { font-size: 0.9em; }
+  img { display: block; width: 100%; max-width: 800px; height: auto; margin-top: 10px; background: #000; border-radius: 4px; }
+</style>
+</head>
+<body>
+<main>
+<h1>zj-strip-bridge previews</h1>
+<p class="lead">What the N4E touch strip shows for each example, rendered without a device
+(<code>./preview.sh</code>). Each image is the 800x128 raw frame.</p>
+<nav><a href="#default">Default templates</a> &middot; <a href="#custom">Custom templates</a></nav>
+<div class="legend">
+  <p><span class="badge def">Default</span> built-in templates, <strong>no template settings</strong>. Compact mode only sets <code>mode</code> and <code>slot</code>.</p>
+  <p><span class="badge cus">Custom</span> one or more template settings, shown in the boxes under the title.</p>
+</div>
+<h2 id="default">Default templates <small>13 examples</small></h2>
+<p class="lead">What you get when the plugin is loaded without any template setting: first the strip, then the one-slot compact mode.</p>
+<h4>Strip</h4>
+<p class="lead">The whole touch strip, the default mode.</p>
+<section id="default-mixed">
+<h3><span class="badge def">Default</span> Mixed: two blocked, one failed, one working, one done</h3>
+<p>Five agents. Segment 1 counts them; segments 2 and 3 are the two that wait longest, segment 4 summarises the other three.</p>
+<p class="meta">Scenario <code>mixed</code>, default templates, no configuration</p>
+<img src="default-mixed.png" width="800" height="128" alt="Mixed: two blocked, one failed, one working, one done">
+</section>
+<section id="default-agents">
+<h3><span class="badge def">Default</span> Three agents</h3>
+<p>Claude waits for approval, Codex works (60%), OpenCode has finished.</p>
+<p class="meta">Scenario <code>agents</code>, default templates, no configuration</p>
+<img src="default-agents.png" width="800" height="128" alt="Three agents">
+</section>
+<section id="default-busy">
+<h3><span class="badge def">Default</span> Many panes</h3>
+<p>More than three active panes: two are shown, the rest fold into +N more, headed by the most urgent hidden state.</p>
+<p class="meta">Scenario <code>busy</code>, default templates, no configuration</p>
+<img src="default-busy.png" width="800" height="128" alt="Many panes">
+</section>
+<section id="default-one-blocked">
+<h3><span class="badge def">Default</span> One pane</h3>
+<p>A single blocked pane.</p>
+<p class="meta">Scenario <code>one-blocked</code>, default templates, no configuration</p>
+<img src="default-one-blocked.png" width="800" height="128" alt="One pane">
+</section>
+<section id="default-tasks">
+<h3><span class="badge def">Default</span> One agent with background tasks</h3>
+<p>By default the message is shown, not the task count.</p>
+<p class="meta">Scenario <code>tasks</code>, default templates, no configuration</p>
+<img src="default-tasks.png" width="800" height="128" alt="One agent with background tasks">
+</section>
+<section id="default-idle">
+<h3><span class="badge def">Default</span> Nothing active</h3>
+<p>The counts panel stays, all grey, and the other segments say that all is clear.</p>
+<p class="meta">Scenario <code>idle</code>, default templates, no configuration</p>
+<img src="default-idle.png" width="800" height="128" alt="Nothing active">
+</section>
+<section id="safe-text">
+<h3><span class="badge def">Default</span> Untrusted text</h3>
+<p>A pane whose name and message contain markup, a segment separator and an escape code. They are shown as plain text and cannot add segments.</p>
+<p class="meta">Scenario <code>hostile</code>, default templates, no configuration</p>
+<img src="safe-text.png" width="800" height="128" alt="Untrusted text">
+</section>
+<h4>One slot (compact mode)</h4>
+<p class="lead">mode and slot are set; the template is the default. The slot is drawn as the first 200 px of the frame; on the device it is the one dial or key you chose. It shows the most urgent state with its count, and the top pane.</p>
+<section id="default-compact-mixed">
+<h3><span class="badge def">Default</span> Mixed</h3>
+<p>Two panes wait for you: the slot shows the orange marker, 2, and the pane that has waited longest.</p>
+<p class="meta">Scenario <code>mixed</code>, default template; only the mode is set</p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<img src="default-compact-mixed.png" width="800" height="128" alt="Mixed">
+</section>
+<section id="default-compact-agents">
+<h3><span class="badge def">Default</span> Three agents</h3>
+<p>Claude waits, so the slot shows it.</p>
+<p class="meta">Scenario <code>agents</code>, default template; only the mode is set</p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<img src="default-compact-agents.png" width="800" height="128" alt="Three agents">
+</section>
+<section id="default-compact-busy">
+<h3><span class="badge def">Default</span> Many panes</h3>
+<p>Only the most urgent pane is named; the count covers all panes in that state.</p>
+<p class="meta">Scenario <code>busy</code>, default template; only the mode is set</p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<img src="default-compact-busy.png" width="800" height="128" alt="Many panes">
+</section>
+<section id="default-compact-one-blocked">
+<h3><span class="badge def">Default</span> One pane</h3>
+<p>A single blocked pane.</p>
+<p class="meta">Scenario <code>one-blocked</code>, default template; only the mode is set</p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<img src="default-compact-one-blocked.png" width="800" height="128" alt="One pane">
+</section>
+<section id="default-compact-tasks">
+<h3><span class="badge def">Default</span> Working pane</h3>
+<p>No waiting pane, so the top state is working.</p>
+<p class="meta">Scenario <code>tasks</code>, default template; only the mode is set</p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<img src="default-compact-tasks.png" width="800" height="128" alt="Working pane">
+</section>
+<section id="default-compact-idle">
+<h3><span class="badge def">Default</span> Nothing active</h3>
+<p>The slot stays blank (empty idle template). With blank_when_idle it is cleared instead.</p>
+<p class="meta">Scenario <code>idle</code>, default template; only the mode is set</p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<img src="default-compact-idle.png" width="800" height="128" alt="Nothing active">
+</section>
+<h2 id="custom">Custom templates <small>14 examples</small></h2>
+<p class="lead">The same data laid out with <code>entry_template</code>, <code>counts_template</code>, <code>more_template</code>, <code>compact_template</code> and <code>idle_template</code>.</p>
+<h4>Strip</h4>
+<p class="lead">Templates for the touch strip.</p>
+<section id="idle-text">
+<h3><span class="badge cus">Custom</span> Idle text</h3>
+<p>idle_template replaces the whole output when nothing is active.</p>
+<p class="meta">Scenario <code>idle</code></p>
+<pre>idle_template=[c=grey]all quiet[/c]\n{total} active</pre>
+<img src="idle-text.png" width="800" height="128" alt="Idle text">
+</section>
+<section id="tasks">
+<h3><span class="badge cus">Custom</span> Background tasks</h3>
+<p>Child records show up with {tasks}.</p>
+<p class="meta">Scenario <code>tasks</code></p>
+<pre>entry_template=[b]{app|title:14}[/b]\n[c={color}]{state_label}[/c]\n{tasks|progress_pct|msg:22}</pre>
+<img src="tasks.png" width="800" height="128" alt="Background tasks">
+</section>
+<section id="age">
+<h3><span class="badge cus">Custom</span> Age</h3>
+<p>{age} is the time since the pane last reported.</p>
+<p class="meta">Scenario <code>agents</code></p>
+<pre>entry_template=[b]{app|title:14}[/b] [c=grey]{age}[/c]\n[c={color}]{state_label}[/c]\n{msg:22}</pre>
+<img src="age.png" width="800" height="128" alt="Age">
+</section>
+<section id="custom-layout">
+<h3><span class="badge cus">Custom</span> Counts and entries re-templated</h3>
+<p>A one-line summary on the left, a marker before each name.</p>
+<p class="meta">Scenario <code>mixed</code></p>
+<pre>counts_template=[b]{total}[/b] active\n[c={needs_you_color}]{needs_you} need you[/c]\n[c={failed_color}]{failed} failed[/c]</pre>
+<pre>entry_template={marker} [b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]{msg:24}[/c]</pre>
+<img src="custom-layout.png" width="800" height="128" alt="Counts and entries re-templated">
+</section>
+<section id="message-first">
+<h3><span class="badge cus">Custom</span> Message first</h3>
+<p>The request is the headline, the agent a grey caption.</p>
+<p class="meta">Scenario <code>agents</code></p>
+<pre>entry_template={msg:20}\n[c={color}]{state_label}[/c]\n[c=grey]{app|title}[/c]</pre>
+<img src="message-first.png" width="800" height="128" alt="Message first">
+</section>
+<section id="big-marker">
+<h3><span class="badge cus">Custom</span> Big marker</h3>
+<p>A large coloured marker and the name. [s=N] scales text between 0.5 and 3.</p>
+<p class="meta">Scenario <code>mixed</code></p>
+<pre>entry_template=[s=2.4][c={color}]{marker}[/c][/s]\n[b]{app|title:12}[/b]</pre>
+<pre>counts_template=[s=1.6][c={needs_you_color}]● {needs_you}[/c][/s]\n[s=1.6][c={failed_color}]✗ {failed}[/c][/s]</pre>
+<img src="big-marker.png" width="800" height="128" alt="Big marker">
+</section>
+<section id="progress">
+<h3><span class="badge cus">Custom</span> Progress first</h3>
+<p>Working panes show their percentage, others their state.</p>
+<p class="meta">Scenario <code>agents</code></p>
+<pre>entry_template=[b]{app|title:14}[/b]\n[c={color}]{progress_pct|state_label}[/c]\n[c=grey]{msg:22}[/c]</pre>
+<img src="progress.png" width="800" height="128" alt="Progress first">
+</section>
+<section id="kind">
+<h3><span class="badge cus">Custom</span> State and kind</h3>
+<p>The raw protocol values, for people who want them.</p>
+<p class="meta">Scenario <code>mixed</code></p>
+<pre>entry_template=[b]{app|title:14}[/b]\n[c={color}]{state}[/c] [c=grey]{kind}[/c]\n{msg:22}</pre>
+<img src="kind.png" width="800" height="128" alt="State and kind">
+</section>
+<section id="where">
+<h3><span class="badge cus">Custom</span> Where is it?</h3>
+<p>Tab and pane ids, to find the pane that needs you.</p>
+<p class="meta">Scenario <code>mixed</code></p>
+<pre>entry_template=[b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]tab {tab} pane {pane} {age}[/c]</pre>
+<img src="where.png" width="800" height="128" alt="Where is it?">
+</section>
+<section id="more-segment">
+<h3><span class="badge cus">Custom</span> The +N more segment</h3>
+<p>more_template, here with the marker and the number of hidden panes.</p>
+<p class="meta">Scenario <code>busy</code></p>
+<pre>more_template=[s=1.6][c={color}]{marker}[/c][/s] [b]+{hidden}[/b]\n[c={color}]{state_label}[/c]</pre>
+<img src="more-segment.png" width="800" height="128" alt="The +N more segment">
+</section>
+<h4>One slot (compact mode)</h4>
+<p class="lead">compact_template and idle_template with mode and slot set.</p>
+<section id="compact-custom">
+<h3><span class="badge cus">Custom</span> Compact with age</h3>
+<p>compact_template with the age.</p>
+<p class="meta">Scenario <code>agents</code></p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<pre>compact_template={marker} {count} [c=grey]{age}[/c]\n[b]{app|title:10}[/b]\n{state_label}</pre>
+<img src="compact-custom.png" width="800" height="128" alt="Compact with age">
+</section>
+<section id="compact-ratio">
+<h3><span class="badge cus">Custom</span> Compact: ratio</h3>
+<p>Waiting panes out of all active ones.</p>
+<p class="meta">Scenario <code>mixed</code></p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<pre>compact_template=[s=1.8][c={color}]{needs_you}/{total}[/c][/s]\n{state_label}</pre>
+<img src="compact-ratio.png" width="800" height="128" alt="Compact: ratio">
+</section>
+<section id="compact-message">
+<h3><span class="badge cus">Custom</span> Compact: message</h3>
+<p>The request itself in the slot.</p>
+<p class="meta">Scenario <code>agents</code></p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<pre>compact_template=[c={color}]{marker}[/c] [b]{app|title:8}[/b]\n{msg:14}</pre>
+<img src="compact-message.png" width="800" height="128" alt="Compact: message">
+</section>
+<section id="compact-idle">
+<h3><span class="badge cus">Custom</span> Compact: idle text</h3>
+<p>What the slot shows when nothing is active.</p>
+<p class="meta">Scenario <code>idle</code></p>
+<pre>mode=compact</pre>
+<pre>slot=dial1</pre>
+<pre>idle_template=[c=grey]quiet[/c]</pre>
+<img src="compact-idle.png" width="800" height="128" alt="Compact: idle text">
+</section>
+</main>
+</body>
+</html>
