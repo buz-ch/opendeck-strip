@@ -1,9 +1,11 @@
 use image::RgbImage;
-use std::io::Read;
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -13,6 +15,7 @@ use serde_json::{Value, json};
 use crate::config::Config;
 use crate::doctor;
 use crate::encode;
+use crate::frame::{self, ParseError};
 use crate::install;
 use crate::raw_client;
 use crate::render::markup::escape_markup;
@@ -55,6 +58,36 @@ enum Commands {
     Clear {
         #[arg(allow_hyphen_values = true)]
         slots: Vec<String>,
+    },
+    /// Apply deck frames from stdin (zj-strip-bridge `zjsb.follow -a view=deck`)
+    Apply {
+        /// Clear the owned slots if no line arrives for this many seconds
+        #[arg(long, value_parser = positive_secs)]
+        idle_clear: Option<u64>,
+    },
+    /// Follow the deck stream of a zj-strip-bridge plugin and apply its frames
+    Follow {
+        /// Zellij session; default: $ZELLIJ_SESSION_NAME if live, else the first live one
+        #[arg(long)]
+        session: Option<String>,
+        /// Zellij binary (default: `zellij` on PATH)
+        #[arg(long)]
+        zellij: Option<PathBuf>,
+        /// Reconnect when no line arrives for this many seconds
+        #[arg(long, default_value_t = 15, value_parser = positive_secs)]
+        stall_secs: u64,
+        /// Reconnect backoff in seconds: MIN,MAX
+        #[arg(long, default_value = "1,10")]
+        retry_secs: String,
+        /// Clear the owned slots after no session was live for this many seconds
+        #[arg(long, default_value_t = 10)]
+        grace_secs: u64,
+        /// Clear the owned slots on SIGTERM or SIGINT
+        #[arg(long)]
+        clear_on_exit: bool,
+        /// Read until the first end of stream, then exit (0 if a frame was applied, else 1)
+        #[arg(long)]
+        once: bool,
     },
     /// Print the status file path this shell would use
     Where,
@@ -189,6 +222,24 @@ pub fn run() -> Result<i32> {
             clear(&slots)?;
             Ok(0)
         }
+        Commands::Apply { idle_clear } => apply(idle_clear.map(Duration::from_secs)),
+        Commands::Follow {
+            session,
+            zellij,
+            stall_secs,
+            retry_secs,
+            grace_secs,
+            clear_on_exit,
+            once,
+        } => crate::follow::run(crate::follow::Options {
+            session,
+            zellij: zellij.unwrap_or_else(|| PathBuf::from("zellij")),
+            stall: Duration::from_secs(stall_secs),
+            retry: crate::follow::parse_retry(&retry_secs)?,
+            grace: Duration::from_secs(grace_secs),
+            clear_on_exit,
+            once,
+        }),
         Commands::Where => {
             println!("{}", status::status_path().display());
             Ok(0)
@@ -441,33 +492,71 @@ fn set(items: &[String], plain: bool) -> Result<()> {
     let path = status::status_path();
     status::update(&path, |status| {
         for pair in items.chunks(2) {
-            let key = &pair[0];
-            let raw = unescape(&pair[1]);
-            match key.as_str() {
-                "labels" => match parse_bool(&raw) {
-                    Some(value) => status.set_raw("labels", Value::Bool(value)),
-                    None => log::warn!("labels expects 0/1/on/off, got {raw:?}"),
-                },
-                "strip_mode" => match StripMode::parse(&raw) {
-                    Some(mode) => status.set_raw("strip_mode", json!(mode.to_string())),
-                    None => log::warn!("strip_mode expects continuous, tiles or raw, got {raw:?}"),
-                },
-                "strip_gap" => match raw.trim().parse::<u32>() {
-                    Ok(gap) => status.set_raw("strip_gap", json!(gap.min(100))),
-                    Err(_) => log::warn!("strip_gap expects a number, got {raw:?}"),
-                },
-                _ => {
-                    let text = if plain { escape_markup(&raw) } else { raw };
-                    let value = parse_slot_value(&text);
-                    if status::SlotName::parse(key).is_none() && key != "strip" {
-                        log::warn!("unknown slot {key}; storing it anyway");
-                    }
-                    status.set_slot(key, value);
-                }
-            }
+            apply_set(status, &pair[0], &pair[1], plain);
         }
     })?;
     Ok(())
+}
+
+/// Apply one `SLOT TEXT` pair the way `set` does. Shared with `apply`, which passes
+/// `plain = false` because the plugin escapes untrusted text itself.
+pub(crate) fn apply_set(status: &mut Status, key: &str, raw: &str, plain: bool) {
+    let raw = unescape(raw);
+    match key {
+        "labels" => match parse_bool(&raw) {
+            Some(value) => status.set_raw("labels", Value::Bool(value)),
+            None => log::warn!("labels expects 0/1/on/off, got {raw:?}"),
+        },
+        "strip_mode" => match StripMode::parse(&raw) {
+            Some(mode) => status.set_raw("strip_mode", json!(mode.to_string())),
+            None => log::warn!("strip_mode expects continuous, tiles or raw, got {raw:?}"),
+        },
+        "strip_gap" => match raw.trim().parse::<u32>() {
+            Ok(gap) => status.set_raw("strip_gap", json!(gap.min(100))),
+            Err(_) => log::warn!("strip_gap expects a number, got {raw:?}"),
+        },
+        _ => {
+            let text = if plain { escape_markup(&raw) } else { raw };
+            apply_slot(status, key, parse_slot_value(&text));
+        }
+    }
+}
+
+pub(crate) fn apply_slot(status: &mut Status, key: &str, value: SlotValue) {
+    if status::SlotName::parse(key).is_none() && key != "strip" {
+        log::warn!("unknown slot {key}; storing it anyway");
+    }
+    status.set_slot(key, value);
+}
+
+/// Apply one typed settings value from a deck frame. Known keys go through the
+/// same conversion as `set`; unknown keys are stored as-is for forward compatibility.
+pub(crate) fn apply_setting(status: &mut Status, key: &str, value: &Value) {
+    let raw = match value {
+        Value::String(text) => text.clone(),
+        Value::Bool(flag) => flag.to_string(),
+        Value::Number(number) => number.to_string(),
+        _ => {
+            status.set_raw(key, value.clone());
+            return;
+        }
+    };
+    match key {
+        "labels" | "strip_mode" | "strip_gap" => apply_set(status, key, &raw, false),
+        _ => status.set_raw(key, value.clone()),
+    }
+}
+
+/// Remove one slot the way `clear` does: `strip` also removes the four dials.
+pub(crate) fn remove_slot(status: &mut Status, slot: &str) {
+    if slot == "strip" {
+        status.remove("strip");
+        for index in 1..=4 {
+            status.remove(&format!("dial{index}"));
+        }
+    } else {
+        status.remove(slot);
+    }
 }
 
 fn parse_slot_value(text: &str) -> SlotValue {
@@ -519,14 +608,258 @@ fn clear(slots: &[String]) -> Result<()> {
             return;
         }
         for slot in slots {
-            if slot == "strip" {
-                status.remove("strip");
-                for index in 1..=4 {
-                    status.remove(&format!("dial{index}"));
+            remove_slot(status, slot);
+        }
+    })?;
+    Ok(())
+}
+
+/// Whole seconds, 1 or more; rejected by clap as a usage error.
+fn positive_secs(text: &str) -> Result<u64, String> {
+    match text.trim().parse::<u64>() {
+        Ok(0) => Err("must be at least 1 second".to_owned()),
+        Ok(secs) => Ok(secs),
+        Err(_) => Err(format!("expected whole seconds, got {text:?}")),
+    }
+}
+
+fn apply(idle_clear: Option<Duration>) -> Result<i32> {
+    let end = run_stream(
+        io::stdin(),
+        idle_clear,
+        OnIdle::Continue,
+        OnGap::Warn,
+        None,
+        &mut Stream::new(),
+    )?;
+    Ok(match end {
+        StreamEnd::TooOld => 2,
+        StreamEnd::Eof | StreamEnd::Stall | StreamEnd::Stopped | StreamEnd::SeqGap => 0,
+    })
+}
+
+/// How a stream ends. `Stall` means the idle timeout fired; the caller decides
+/// whether that is an error (`follow` reconnects) or expected (`apply --idle-clear`).
+/// `SeqGap` means lines were lost, so only `follow` sees it: it reconnects, because
+/// the first frame of a connection is full.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StreamEnd {
+    Eof,
+    Stall,
+    SeqGap,
+    TooOld,
+    Stopped,
+}
+
+/// What a gap in `seq` means to the caller. A delta cannot rebuild what was lost,
+/// and treating one as full would delete owned slots, so neither caller does that.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OnGap {
+    /// `apply` has one stream only: warn and go on reading.
+    Warn,
+    /// `follow` ends the connection; the reconnect's first frame is full.
+    Resync,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OnIdle {
+    /// Clear the owned slots and keep reading.
+    Continue,
+    /// Clear the owned slots and return `StreamEnd::Stall`.
+    Stop,
+}
+
+/// What one deck stream remembers across the connections `follow` makes: the
+/// idle clock and the last full frame's owned slots. `seq` is tracked per
+/// connection, since each one starts at `hello`.
+pub(crate) struct Stream {
+    started: Instant,
+    /// When the last line of any connection arrived; `None` until the first one.
+    last_line: Option<Instant>,
+    /// The owned slots were already cleared in the current silent stretch.
+    idle_cleared: bool,
+    seq: frame::Seq,
+    pub(crate) owned: Vec<String>,
+    /// Lines received and deck frames applied since the stream started.
+    pub(crate) lines: usize,
+    pub(crate) frames: usize,
+}
+
+impl Stream {
+    pub(crate) fn new() -> Self {
+        Self {
+            started: Instant::now(),
+            last_line: None,
+            idle_cleared: false,
+            seq: frame::Seq::default(),
+            owned: Vec::new(),
+            lines: 0,
+            frames: 0,
+        }
+    }
+
+    /// A new connection numbers its lines from `hello` again; the idle clock is kept.
+    pub(crate) fn reconnected(&mut self) {
+        self.seq = frame::Seq::default();
+    }
+
+    fn line_arrived(&mut self) {
+        self.last_line = Some(Instant::now());
+        self.idle_cleared = false;
+        self.lines += 1;
+    }
+
+    /// How long no line arrived, counted from the stream's start before the first.
+    fn idle_for(&self) -> Duration {
+        self.last_line.unwrap_or(self.started).elapsed()
+    }
+
+    /// Clear the owned slots once per silent stretch of `idle` or more. A
+    /// reconnect does not restart the clock; only a line does.
+    pub(crate) fn clear_if_idle(&mut self, path: &Path, idle: Duration) -> Result<()> {
+        if self.idle_cleared || self.idle_for() < idle {
+            return Ok(());
+        }
+        self.idle_cleared = true;
+        if !self.owned.is_empty() {
+            clear_owned(path, &self.owned)?;
+            log::info!(
+                "no line for {}s; cleared {} owned slot(s)",
+                idle.as_secs(),
+                self.owned.len()
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Apply NDJSON deck frames from `reader` until end of input, a stall, a gap in
+/// `seq`, a newer protocol version or `stop`. Every frame is one atomic
+/// status-file update.
+///
+/// The reader runs in its own thread so an idle timeout and the stop flag can be
+/// observed while a pipe or terminal is quiet. `stream` is kept across calls by
+/// `follow`, so its idle clock and `seq` numbering span connections. With `stop`
+/// set the reader is polled, so a signal is seen without waiting out a long stall.
+pub(crate) fn run_stream<R: Read + Send + 'static>(
+    reader: R,
+    idle: Option<Duration>,
+    on_idle: OnIdle,
+    on_gap: OnGap,
+    stop: Option<&AtomicBool>,
+    stream: &mut Stream,
+) -> Result<StreamEnd> {
+    let (tx, rx) = mpsc::channel::<io::Result<String>>();
+    thread::spawn(move || {
+        let mut reader = BufReader::new(reader);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    if tx.send(Ok(std::mem::take(&mut line))).is_err() {
+                        break;
+                    }
                 }
-            } else {
-                status.remove(slot);
+                Err(err) => {
+                    let _ = tx.send(Err(err));
+                    break;
+                }
             }
+        }
+    });
+    run_lines(rx, idle, on_idle, on_gap, stop, stream)
+}
+
+fn run_lines(
+    rx: mpsc::Receiver<io::Result<String>>,
+    idle: Option<Duration>,
+    on_idle: OnIdle,
+    on_gap: OnGap,
+    stop: Option<&AtomicBool>,
+    stream: &mut Stream,
+) -> Result<StreamEnd> {
+    let path = status::status_path();
+    // A short poll tick makes a signal visible without waiting out a long stall.
+    let poll = stop.map(|_| Duration::from_millis(200));
+    let wait = match (idle, poll) {
+        (Some(idle), Some(poll)) => Some(idle.min(poll)),
+        (Some(idle), None) => Some(idle),
+        (None, Some(poll)) => Some(poll),
+        (None, None) => None,
+    };
+    loop {
+        if stop.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            return Ok(StreamEnd::Stopped);
+        }
+        let received = match wait {
+            Some(wait) => match rx.recv_timeout(wait) {
+                Ok(item) => Some(item),
+                Err(RecvTimeoutError::Timeout) => None,
+                Err(RecvTimeoutError::Disconnected) => return Ok(StreamEnd::Eof),
+            },
+            None => match rx.recv() {
+                Ok(item) => Some(item),
+                Err(_) => return Ok(StreamEnd::Eof),
+            },
+        };
+        let Some(item) = received else {
+            if let Some(idle) = idle {
+                stream.clear_if_idle(&path, idle)?;
+                if on_idle == OnIdle::Stop && stream.idle_cleared {
+                    return Ok(StreamEnd::Stall);
+                }
+            }
+            continue;
+        };
+        let line = item?;
+        stream.line_arrived();
+        let line = line.trim_end_matches(['\n', '\r']);
+        if line.trim().is_empty() {
+            continue;
+        }
+        match frame::parse_parts(line) {
+            Ok((frame, seq)) => {
+                if stream.seq.check(seq) {
+                    match on_gap {
+                        OnGap::Warn => log::warn!(
+                            "deck stream skipped or repeated a seq (got {seq:?}); a frame may be lost until the next full one"
+                        ),
+                        OnGap::Resync => {
+                            log::warn!("deck stream skipped or repeated a seq (got {seq:?})");
+                            return Ok(StreamEnd::SeqGap);
+                        }
+                    }
+                }
+                let Some(frame) = frame else {
+                    continue;
+                };
+                if frame.full {
+                    stream.owned = frame.owned.clone();
+                }
+                status::update(&path, |status| frame::apply_frame(status, &frame))?;
+                stream.frames += 1;
+            }
+            Err(ParseError::TooOld) => {
+                log::error!(
+                    "deck frame is newer than version {}; update opendeck-strip",
+                    frame::KNOWN_VERSION
+                );
+                return Ok(StreamEnd::TooOld);
+            }
+            Err(ParseError::Skip) => {
+                log::warn!("skipping unparsable deck line: {line}");
+                stream.seq.lost();
+            }
+        }
+    }
+}
+
+pub(crate) fn clear_owned(path: &Path, owned: &[String]) -> Result<()> {
+    status::update(path, |status| {
+        for slot in owned {
+            remove_slot(status, slot);
         }
     })?;
     Ok(())
@@ -825,6 +1158,63 @@ mod tests {
 
     fn command(args: &[&str]) -> Commands {
         parse(args).expect("parses").command.expect("a command")
+    }
+
+    #[test]
+    fn apply_and_follow_parse_their_options() {
+        assert!(matches!(
+            command(&["apply", "--idle-clear", "5"]),
+            Commands::Apply {
+                idle_clear: Some(5)
+            }
+        ));
+        assert!(matches!(
+            command(&["apply"]),
+            Commands::Apply { idle_clear: None }
+        ));
+        match command(&["follow", "--session", "work", "--clear-on-exit"]) {
+            Commands::Follow {
+                session,
+                zellij,
+                stall_secs,
+                retry_secs,
+                grace_secs,
+                clear_on_exit,
+                once,
+            } => {
+                assert_eq!(session.as_deref(), Some("work"));
+                assert_eq!(zellij, None);
+                assert_eq!(stall_secs, 15);
+                assert_eq!(retry_secs, "1,10");
+                assert_eq!(grace_secs, 10);
+                assert!(clear_on_exit);
+                assert!(!once);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn zero_second_options_are_usage_errors() {
+        for args in [
+            ["apply", "--idle-clear", "0"],
+            ["follow", "--stall-secs", "0"],
+            ["follow", "--stall-secs", "x"],
+        ] {
+            let err = parse(&args).expect_err("rejected");
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::ValueValidation,
+                "{args:?}"
+            );
+            assert_eq!(err.exit_code(), 2, "{args:?}");
+        }
+        assert!(matches!(
+            command(&["apply", "--idle-clear", "1"]),
+            Commands::Apply {
+                idle_clear: Some(1)
+            }
+        ));
     }
 
     #[test]

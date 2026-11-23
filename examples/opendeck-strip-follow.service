@@ -1,0 +1,23 @@
+# Follow the zj-strip-bridge deck and keep the status file current.
+#
+# Install as a user unit:
+#   mkdir -p ~/.config/systemd/user
+#   cp examples/opendeck-strip-follow.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now opendeck-strip-follow.service
+#
+# `follow` connects to the first live Zellij session. Add
+# `--session NAME` to pin one. Adjust ExecStart to the installed binary.
+
+[Unit]
+Description=Follow the zj-strip-bridge deck for opendeck-strip
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/opendeck-strip follow --clear-on-exit
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

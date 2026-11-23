@@ -14,6 +14,7 @@ It reads everything from one JSON status file, so anything that can write a file
 - **Fills the whole strip.** Continuous mode draws one picture across the four dials with no gaps. Strip text can be split into up to four independent segments with `|`.
 - **Sends full-height frames.** In `raw` mode it renders an 800x128 frame and sends it straight to the AKP05 plugin's socket, so the strip is used edge to edge with no letterbox bands. It falls back to the standard dial-image path when the socket isn't available. `opendeck-strip raw-string "text"` renders a string (same syntax as `set strip`) as such a frame and shows it directly.
 - **Runs from scripts.** `set`, `get`, `clear`, `watch` (re-run a command every few seconds and show its output) and `where` cover everyday use.
+- **Follows a Zellij deck.** `apply` consumes `zj-strip-bridge` deck frames from a pipe and `follow` supervises that pipe, reconnecting after stalls and session restarts.
 - **Helps you test.** `strip-preview` renders a PNG without a device, `size-test` measures the image size the device will receive, `raw-test` shows a coloured test frame, `raw-test --ruler` shows an edge ruler, and `doctor` checks the plugin, hidraw access and the installed AKP05 build.
 
 ## Quick example
@@ -23,6 +24,7 @@ opendeck-strip set dial1 'INBOX\n3' dial2 '{"text":"DISK","bar":0.72}'
 opendeck-strip watch --slot dial3 --every 2 -- date +%H:%M
 opendeck-strip clear
 opendeck-strip raw-string '[b]BUILD[/b] [c=green]OK[/c]|CPU 42%|MEM 61%|DISK 72%'   # full 800x128 strip via AKP05 raw mode
+opendeck-strip follow --clear-on-exit   # show the deck of a running zj-strip-bridge
 ```
 
 ## Requirements
@@ -30,6 +32,7 @@ opendeck-strip raw-string '[b]BUILD[/b] [c=green]OK[/c]|CPU 42%|MEM 61%|DISK 72%
 - Mirabox N4E (USB ID `6603:1007`), Linux only.
 - OpenDeck with the [AKP05 device plugin](https://github.com/ambiso/opendeck-akp05) v0.12.0 or newer. Continuous mode also needs N4E firmware 02.014 or newer.
 - For `raw` mode: an AKP05 build with raw strip mode and `strip_raw = true` in its config.
+- For `apply` and `follow`: Zellij 0.46.0 or newer with a running `zj-strip-bridge` plugin.
 - Rust 1.88 or newer to build.
 
 Installation, usage and configuration are described below. Supported device: Mirabox N4E.
@@ -178,6 +181,16 @@ opendeck-strip strip test --seconds 30
 opendeck-strip doctor
 ```
 
+`follow` shows the deck served by `zj-strip-bridge` over `zellij pipe`. It resolves a live Zellij session, starts `zellij --session S pipe --name zjsb.follow -a view=deck`, applies the frames, and reconnects after a stall or a session restart. `--session NAME` pins a session, `--clear-on-exit` blanks the slots the plugin owns on SIGTERM or SIGINT, and `--once` stops after the first stream (exit 0 if a frame was applied, else 1). `apply` is the same reader without the supervisor; it takes frames on standard input. Set `output "pipe"` in the plugin for this setup, so that only `follow` writes the deck and the deck is cleared after a stall, even when Zellij is killed.
+
+```sh
+opendeck-strip follow
+opendeck-strip follow --session work --clear-on-exit
+zellij --session work pipe --name zjsb.follow -a view=deck | opendeck-strip apply
+```
+
+A systemd user unit is in `examples/opendeck-strip-follow.service`. The frame format, exit codes and reconnect rules are documented in [docs/status-format.md](docs/status-format.md#following-zj-strip-bridge).
+
 `watch` runs a command on an interval and shows its first four output lines. Failures and timeouts use a red error style. The command is executed directly, not through a shell, so arguments with spaces stay intact; use `sh -c` for pipes and redirection.
 
 ```sh
@@ -253,7 +266,7 @@ The full schema, the span object fields and the internal `@slices:<dir>#<n>` for
 
 ## Configuration
 
-The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFIG` selects another file. Every key can be overridden with an environment variable named `OPENDECK_STRIP_` plus the upper-case key, for example `OPENDECK_STRIP_STRIP_MODE=tiles`.
+The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFIG` selects another file. Every key can be overridden with an environment variable named `OPENDECK_STRIP_` plus the upper-case key, for example `OPENDECK_STRIP_STRIP_MODE=tiles`. Boolean keys (`follow`, `word_wrap`, `strip_uniform_size`, `strip_uniform_skip_first`) accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -276,6 +289,7 @@ The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFI
 | `bar_color` | `#55ccff` | Progress bar fill |
 | `bar_bg` | `#202830` | Progress bar track |
 | `watch_timeout_secs` | 5 | Timeout for `watch` commands |
+| `follow` | false | Expect `follow` to run; `doctor` then checks for a live Zellij session |
 | `font_sans`, `font_sans_bold`, `font_sans_italic`, `font_sans_bold_italic` | embedded | Proportional font paths |
 | `font_mono`, `font_mono_bold`, `font_mono_italic`, `font_mono_bold_italic` | embedded | Monospaced font paths |
 
@@ -308,7 +322,7 @@ Keys receive OpenDeck titles, so inline styling on a key is flattened to plain t
 
 Logs go to standard error and to `<status file>.log`. The default level is `info`; use `RUST_LOG=debug` for more detail. Every CLI command also appends to that log.
 
-`opendeck-strip doctor` is the first check. It reports the status path and its source, whether the file parses, whether a running OpenDeck process resolves the same status path, which plugin directory is installed, whether the plugin binary is executable, hidraw access, and the AKP05 version. It also reports whether an AKP05 raw socket exists (a warning when `strip_mode` is `raw` and none does). It also prints the last full-strip line from the AKP05 log, which carries the device firmware and the chosen renderer (`ImageSlot(n)`, or `Bgpic` when the override is set). AKP05 versions below 0.12.0 are a failure for continuous mode and only a warning when `strip_mode` is `tiles`. The command exits non-zero on failures; warnings alone leave the exit code at zero.
+`opendeck-strip doctor` is the first check. It reports the status path and its source, whether the file parses, whether a running OpenDeck process resolves the same status path, which plugin directory is installed, whether the plugin binary is executable, whether `zellij` is on `PATH` and new enough for `follow` (0.46.0), hidraw access, and the AKP05 version. With `follow = true` it also checks for a live Zellij session. It also reports whether an AKP05 raw socket exists (a warning when `strip_mode` is `raw` and none does). It also prints the last full-strip line from the AKP05 log, which carries the device firmware and the chosen renderer (`ImageSlot(n)`, or `Bgpic` when the override is set). AKP05 versions below 0.12.0 are a failure for continuous mode and only a warning when `strip_mode` is `tiles`. The command exits non-zero on failures; warnings alone leave the exit code at zero.
 
 Nothing appears on the device:
 
@@ -333,7 +347,7 @@ Never write the boot logo or any ROM data. The device SDK warns that this can br
 
 ## Development
 
-The crate is split into `cli`, `status`, `plugin`, `render` (`canvas`, `fonts`, `layout`, `markup`), `encode`, `sizetest`, `install`, `doctor`, `config`, `color` and `logging`.
+The crate is split into `cli`, `status`, `frame`, `follow`, `plugin`, `render` (`canvas`, `fonts`, `layout`, `markup`), `encode`, `sizetest`, `install`, `doctor`, `config`, `color` and `logging`.
 
 Tests:
 

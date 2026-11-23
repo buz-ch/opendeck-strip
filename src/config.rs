@@ -40,6 +40,9 @@ pub struct Config {
     pub raw_socket: Option<PathBuf>,
 
     pub watch_timeout_secs: u64,
+
+    /// Expect `opendeck-strip follow` to be running; `doctor` then checks for a live session.
+    pub follow: bool,
 }
 
 impl Default for Config {
@@ -72,6 +75,7 @@ impl Default for Config {
             redraw_hz: 2.0,
             raw_socket: None,
             watch_timeout_secs: 5,
+            follow: false,
         }
     }
 }
@@ -103,7 +107,14 @@ impl Config {
     }
 
     fn apply_env(&mut self) {
-        for (key, value) in std::env::vars_os() {
+        self.apply_env_vars(std::env::vars_os());
+    }
+
+    fn apply_env_vars(
+        &mut self,
+        vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+    ) {
+        for (key, value) in vars {
             let (Some(key), Some(value)) = (key.to_str(), value.to_str()) else {
                 continue;
             };
@@ -126,19 +137,20 @@ impl Config {
                 "MAX_FONT_SIZE" => set_parse(&mut self.max_font_size, value),
                 "LINE_HEIGHT" => set_parse(&mut self.line_height, value),
                 "PADDING" => set_parse(&mut self.padding, value),
-                "WORD_WRAP" => set_parse(&mut self.word_wrap, value),
+                "WORD_WRAP" => set_bool(&mut self.word_wrap, value),
                 "ALIGN" => set(&mut self.align, value),
                 "VALIGN" => set(&mut self.valign, value),
                 "BAR_COLOR" => set(&mut self.bar_color, value),
                 "BAR_BG" => set(&mut self.bar_bg, value),
                 "STRIP_MODE" => set(&mut self.strip_mode, value),
                 "STRIP_GAP" => set_parse(&mut self.strip_gap, value),
-                "STRIP_UNIFORM_SIZE" => set_parse(&mut self.strip_uniform_size, value),
-                "STRIP_UNIFORM_SKIP_FIRST" => set_parse(&mut self.strip_uniform_skip_first, value),
+                "STRIP_UNIFORM_SIZE" => set_bool(&mut self.strip_uniform_size, value),
+                "STRIP_UNIFORM_SKIP_FIRST" => set_bool(&mut self.strip_uniform_skip_first, value),
                 "MAX_JPEG_BYTES" => set_parse(&mut self.max_jpeg_bytes, value),
                 "REDRAW_HZ" => set_parse(&mut self.redraw_hz, value),
                 "RAW_SOCKET" => self.raw_socket = Some(value.into()),
                 "WATCH_TIMEOUT_SECS" => set_parse(&mut self.watch_timeout_secs, value),
+                "FOLLOW" => set_bool(&mut self.follow, value),
                 _ => {}
             }
         }
@@ -175,6 +187,13 @@ impl Config {
 fn set(target: &mut String, value: &str) {
     if !value.is_empty() {
         *target = value.to_owned();
+    }
+}
+
+/// Booleans take the same words as the status file's `labels`: 1/true/yes/on, 0/false/no/off.
+fn set_bool(target: &mut bool, value: &str) {
+    if let Some(parsed) = crate::status::parse_bool(value) {
+        *target = parsed;
     }
 }
 
@@ -228,5 +247,39 @@ mod tests {
         assert_eq!(config.strip_gap, 12);
         assert_eq!(config.max_jpeg_bytes, 5000);
         assert_eq!(config.align, Config::default().align);
+    }
+
+    #[test]
+    fn boolean_environment_variables_take_words_and_digits() {
+        for (value, expected) in [
+            ("1", true),
+            ("on", true),
+            ("TRUE", true),
+            ("0", false),
+            ("no", false),
+        ] {
+            let mut config = Config::default();
+            config.apply_env_vars([(
+                std::ffi::OsString::from("OPENDECK_STRIP_FOLLOW"),
+                std::ffi::OsString::from(value),
+            )]);
+            assert_eq!(config.follow, expected, "FOLLOW={value}");
+            let mut config = Config {
+                follow: true,
+                ..Config::default()
+            };
+            config.apply_env_vars([(
+                std::ffi::OsString::from("OPENDECK_STRIP_WORD_WRAP"),
+                std::ffi::OsString::from(value),
+            )]);
+            assert_eq!(config.word_wrap, expected, "WORD_WRAP={value}");
+        }
+    }
+
+    #[test]
+    fn follow_defaults_off_and_parses() {
+        assert!(!Config::default().follow);
+        let config: Config = toml::from_str("follow = true\n").unwrap();
+        assert!(config.follow);
     }
 }

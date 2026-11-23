@@ -23,7 +23,7 @@ The file is one JSON object. Unknown top-level keys are preserved by the command
 | `dial1`, `dial2`, `dial3`, `dial4` | slot value | Dial slots |
 | `key<row>_<col>` | slot value | Key slots, 1-based; the N4E has rows 1 to 2 and columns 1 to 5 |
 | `strip` | slot value or `@slices` string | Strip content; a non-empty value activates strip mode |
-| `strip_mode` | string | `continuous` or `tiles`; aliases `strip`, `tile` are accepted |
+| `strip_mode` | string | `continuous`, `tiles` or `raw`; aliases `strip`, `tile` are accepted |
 | `strip_gap` | integer | Gap between tiles in pixels; `set` clamps to 0–100, rendering clamps to 0–32 |
 | `labels` | boolean, number or string | Show slot names on blank slots when true |
 
@@ -235,3 +235,92 @@ Strip with segments and a non-default mode:
   "labels": true
 }
 ```
+
+## Following zj-strip-bridge
+
+`zj-strip-bridge` can serve its deck over `zellij pipe` instead of running `opendeck-strip set` for every change. The deck arrives as newline-delimited JSON (NDJSON) frames. `opendeck-strip apply` applies that stream; `opendeck-strip follow` starts it and reconnects.
+
+### `apply`
+
+Reads frames on standard input and applies every `deck` frame to the status file in one atomic read-modify-write.
+
+```sh
+zellij --session work pipe --name zjsb.follow -a view=deck | opendeck-strip apply
+```
+
+- Slot strings use the `set` syntax: markup is on (the plugin escapes untrusted text), `\n` is a line break, and a string that starts with `{` and parses as a slot object is stored as an object. An object value is stored as a slot value.
+- `settings` keys are written as top-level keys (`strip_mode`, `strip_gap`, `labels`). Unknown settings are stored unchanged.
+- `clear` names follow `clear` semantics: `strip` also removes `dial1` to `dial4`.
+- `full: true` first removes every slot in the frame's `owned` list that the frame does not set. This makes the deck equal to the frame.
+- `hello`, `ping` and `state` lines are accepted and ignored; `hello` is logged.
+- Unknown `type` values and unknown fields are ignored. A line that is not valid JSON is logged and skipped. A `deck` line without a numeric `v`, or with a `full` that is not a boolean, is skipped the same way: a producer bug must not turn a full frame into a delta.
+- `seq` is checked from `hello` (`seq` 0). A gap, a repeated number or an unparsable line is logged as a warning; the frames after it are applied as what they declare. This differs from "treat the next frame as full" in the frame format below: a delta cannot rebuild the lost state, and taking one as full would delete every owned slot it does not set. Restart the stream to get a full frame; an idle `apply` catches up at the next full frame, which every new connection starts with.
+- `--idle-clear SECS` removes the owned slots when no line, including `ping`, arrived for that long. It clears once per silent stretch and keeps reading; the next line re-arms it. It is off by default for `apply`.
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| 0 | End of input, with or without `--idle-clear` having fired |
+| 1 | The status file cannot be read or updated |
+| 2 | A frame has a higher `v` than this build knows |
+
+### `follow`
+
+Supervises the pipe and applies the same frames.
+
+```sh
+opendeck-strip follow [--session NAME] [--zellij BIN] [--stall-secs N] [--retry-secs MIN,MAX]
+                      [--grace-secs N] [--clear-on-exit] [--once]
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--session` | first live session | Zellij session to follow; it must still be live, see below |
+| `--zellij` | `zellij` on `PATH` | Zellij binary |
+| `--stall-secs` | 15 | Reconnect when no line arrived for this long; clears the owned slots first |
+| `--retry-secs` | `1,10` | Reconnect backoff range in seconds; doubles from MIN to MAX and returns to MIN only after a connection delivered a line |
+| `--grace-secs` | 10 | Clear the owned slots after no session was live for this long |
+| `--clear-on-exit` | off | Clear the owned slots on SIGTERM or SIGINT |
+| `--once` | off | Read until the first end of stream, then exit: 0 if a `deck` frame was applied, 1 if none was |
+
+Without `--session` the session is resolved on every connection attempt: `$ZELLIJ_SESSION_NAME` when it appears in `zellij list-sessions --no-formatting`, otherwise the first live line. Lines containing `(EXITED - attach to resurrect)` are dead sessions. A session given with `--session` is connected to by that name but is still checked against the same list on every attempt: when it is not live, `follow` waits for it and clears the owned slots after `--grace-secs`, as for any other session. When the sessions cannot be listed at all, it logs a warning and retries; it neither connects a session it would have had to guess nor clears. A session given with `--session` is still connected to by name then.
+
+`follow` runs `zellij --session S pipe --name zjsb.follow -a view=deck start` with the child's standard input held open and never written to. It reconnects when the process exits, stdout reaches end of file, no line arrives for `--stall-secs`, or `seq` skips or repeats a number. The first frame after a reconnect is full, so no state is lost; a frame that follows a `seq` gap is not applied. The stall clock counts from the last line of any connection, not from the last connection, and is also checked between reconnects, so a producer that never sends a line is cleared after `--stall-secs` however quickly each connection ends. The owned slots from the last full frame are cleared once per silent stretch, before `follow` reconnects; `--clear-on-exit` does the same on SIGTERM or SIGINT. Only slots listed in the last full frame's `owned` are ever removed. A hard kill leaves the last frame on the deck.
+
+`follow` exits with 0 on SIGTERM or SIGINT, with 1 when the stream could not be read and, under `--once`, when no frame was applied or no session was live, and with 2 on a frame with a higher `v`. `--idle-clear` and `--stall-secs` must be at least 1; 0 is a usage error (exit 2).
+
+`follow` logs to the same file as the plugin and prints a one-line state to standard error on connect, disconnect and stall.
+
+A systemd user unit is in [`examples/opendeck-strip-follow.service`](../examples/opendeck-strip-follow.service):
+
+```ini
+[Service]
+ExecStart=%h/.cargo/bin/opendeck-strip follow --clear-on-exit
+Restart=on-failure
+```
+
+### Frame format
+
+Every line is one JSON object with `"v": 1` and `"type"`. `seq` starts at 0 for `hello` and increases by one per line of a connection; a reconnect starts at 0 again. A skipped or repeated number means a line was lost. A delta cannot rebuild what was lost, and a delta played as full would delete every owned slot it does not set, so `follow` ends the connection on a gap without applying that frame and reconnects, where the first frame is full; `apply` warns and applies the numbered lines as what they declare.
+
+```json
+{"v":1,"type":"hello","plugin":"zj-strip-bridge","version":"0.0.1","session":"work","view":"deck","seq":0}
+{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"<markup>"},"settings":{"strip_mode":"raw"},"clear":[],"owned":["strip","dial1","dial2","dial3","dial4"]}
+{"v":1,"type":"deck","seq":2,"full":false,"set":{"strip":"<markup>"},"settings":{},"clear":[]}
+{"v":1,"type":"state","seq":3,"doc":{ ...version 2 document... }}
+{"v":1,"type":"ping","seq":4}
+{"v":1,"type":"error","error":"unknown pipe"}
+```
+
+Deck fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `full` | boolean | The deck must equal this frame; remove owned slots not in `set`. Absent means `false`; any other type makes the line skipped |
+| `set` | object | Slot values in the `set` syntax |
+| `settings` | object | Typed top-level keys: `strip_mode` string, `strip_gap` number, `labels` boolean |
+| `clear` | array of strings | Slots to remove with `clear` semantics |
+| `owned` | array of strings | Slots the plugin owns: `strip` and `dial1` to `dial4`, or the compact slot. Only sent with a full frame |
+
+A `state` line carries the version 2 document of the plugin under `doc`; `opendeck-strip` ignores it.

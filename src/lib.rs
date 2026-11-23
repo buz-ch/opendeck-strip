@@ -3,6 +3,8 @@ pub mod color;
 pub mod config;
 pub mod doctor;
 pub mod encode;
+pub mod follow;
+pub mod frame;
 pub mod install;
 pub mod logging;
 pub mod plugin;

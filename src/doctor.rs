@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use anyhow::Result;
 
@@ -9,6 +10,7 @@ use crate::status::{self, StripMode};
 pub fn run() -> Result<bool> {
     let mut ok = true;
     let mut warn = 0;
+    let config = crate::config::Config::load();
 
     let status_path = status::status_path();
     println!(
@@ -111,6 +113,39 @@ pub fn run() -> Result<bool> {
         println!("  if you set it.");
     }
 
+    match zellij_version() {
+        Ok(Some(version)) => {
+            println!("zellij: {}.{}.{} on PATH", version.0, version.1, version.2);
+            if version < (0, 46, 0) {
+                println!("  FAIL: `follow` needs zellij 0.46.0 or newer");
+                ok = false;
+            } else {
+                println!("  ok: supports the deck pipe");
+            }
+            if config.follow {
+                match crate::follow::live_sessions(Path::new("zellij")) {
+                    Ok(names) if names.is_empty() => {
+                        println!("  warning: follow = true but no live zellij session");
+                        warn += 1;
+                    }
+                    Ok(names) => println!("  live session(s): {}", names.join(", ")),
+                    Err(err) => {
+                        println!("  warning: cannot list sessions: {err:#}");
+                        warn += 1;
+                    }
+                }
+            }
+        }
+        Ok(None) => {
+            println!("zellij: on PATH but the version cannot be parsed");
+            warn += 1;
+        }
+        Err(err) => {
+            println!("zellij: not usable from PATH ({err})");
+            warn += 1;
+        }
+    }
+
     match hidraw_for(0x6603, 0x1007) {
         Ok(Some(dev)) => {
             print!("hidraw: {} ", dev.display());
@@ -153,10 +188,7 @@ pub fn run() -> Result<bool> {
             {
                 println!("  binary built: {modified:?}");
             }
-            match version_check(
-                parse_version(&version),
-                crate::config::Config::load().strip_mode(),
-            ) {
+            match version_check(parse_version(&version), config.strip_mode()) {
                 VersionCheck::Ok => {
                     println!("  ok: v0.12.0+ supports the N4E continuous strip")
                 }
@@ -187,7 +219,7 @@ pub fn run() -> Result<bool> {
 
     let (lines, raw_warning) = raw_socket_report(
         crate::raw_client::socket_dir().as_deref(),
-        crate::config::Config::load().strip_mode(),
+        config.strip_mode(),
     );
     for line in lines {
         println!("{line}");
@@ -233,6 +265,30 @@ fn raw_socket_report(dir: Option<&Path>, mode: StripMode) -> (Vec<String>, bool)
 }
 
 const AKP05_LOG: &str = "com.github.ambiso.opendeck-akp05.sdPlugin.log";
+
+/// `zellij --version` prints `zellij 0.46.0`; pick the first version-shaped token.
+/// `Ok(None)` means it ran but printed no version; a failed run is an error.
+fn zellij_version() -> std::io::Result<Option<(u64, u64, u64)>> {
+    let output = Command::new("zellij")
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()?;
+    version_output(
+        output.status.code(),
+        &String::from_utf8_lossy(&output.stdout),
+    )
+}
+
+fn version_output(code: Option<i32>, stdout: &str) -> std::io::Result<Option<(u64, u64, u64)>> {
+    if code != Some(0) {
+        return Err(std::io::Error::other(format!(
+            "`zellij --version` exited with {}",
+            code.map_or("a signal".to_owned(), |code| code.to_string())
+        )));
+    }
+    Ok(stdout.split_whitespace().find_map(parse_version))
+}
 
 fn parse_version(text: &str) -> Option<(u64, u64, u64)> {
     let core = text.trim().trim_start_matches('v');
@@ -462,6 +518,25 @@ mod tests {
         .unwrap();
         let line = full_strip_line_in(&path).unwrap();
         assert!(line.ends_with("02.014"), "{line}");
+    }
+
+    #[test]
+    fn parses_zellij_version_output() {
+        assert_eq!(parse_version("zellij 0.46.0"), None);
+        let parsed = "zellij 0.46.0".split_whitespace().find_map(parse_version);
+        assert_eq!(parsed, Some((0, 46, 0)));
+    }
+
+    #[test]
+    fn a_failing_zellij_version_is_an_error_not_an_unparsed_version() {
+        let err = version_output(Some(1), "").expect_err("non-zero exit");
+        assert!(err.to_string().contains("exited with 1"), "{err}");
+        assert!(version_output(None, "").is_err(), "killed by a signal");
+        assert_eq!(
+            version_output(Some(0), "zellij 0.46.0").unwrap(),
+            Some((0, 46, 0))
+        );
+        assert_eq!(version_output(Some(0), "something else").unwrap(), None);
     }
 
     #[test]
