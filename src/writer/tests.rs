@@ -321,3 +321,24 @@ fn an_unchanged_compact_frame_is_dropped_too() {
         "unchanged compact text must not be rewritten"
     );
 }
+
+#[test]
+fn staging_a_document_never_touches_the_status_file() {
+    let mut writer = Writer::new(&config());
+    let mut status = Status::empty();
+    let t0 = Instant::now();
+    let same = doc("a", "blocked", true);
+    writer.document(&mut status, &same, 0, t0);
+
+    writer.stage(&same, 0);
+    assert!(
+        !writer.pending_due(t0 + INTERVAL * 10),
+        "unchanged: nothing staged"
+    );
+
+    writer.stage(&doc("b", "working", true), 0);
+    assert!(
+        writer.pending_due(t0 + INTERVAL * 10),
+        "changed: staged for the next write"
+    );
+}

@@ -155,6 +155,14 @@ impl Writer {
 
     /// Feed one document: write it now, hold it, or drop it as unchanged.
     pub fn document(&mut self, status: &mut Status, doc: &Document, now_ms: u64, now: Instant) {
+        self.stage(doc, now_ms);
+        self.flush_due(status, now);
+    }
+
+    /// Decide what the document should show without touching the status file.
+    /// A due frame stays in `pending` for [`Writer::flush_due`]; an unchanged
+    /// one is dropped, and clears a held frame.
+    pub fn stage(&mut self, doc: &Document, now_ms: u64) {
         let next = match zjsb::render(doc, &self.options, now_ms) {
             Some(text) if self.shown.as_deref() == Some(text.as_str()) && self.raw_set => {
                 // The newest state is already shown; a held frame would only repeat it.
@@ -168,11 +176,7 @@ impl Writer {
             }
             None => Pending::Clear,
         };
-        if self.due(now) {
-            self.write(status, next, now);
-        } else {
-            self.pending = Some(next);
-        }
+        self.pending = Some(next);
     }
 
     fn due(&self, now: Instant) -> bool {
@@ -304,8 +308,13 @@ impl Handler for StateHandler {
         let Some(doc) = parsed.doc else {
             return Ok(LineOutcome::Continue);
         };
-        let (path, writer) = (&self.path, &mut self.writer);
-        status::update(path, |status| writer.document(status, &doc, now_ms, now))?;
+        self.writer.stage(&doc, now_ms);
+        if self.writer.pending_due(now) {
+            let (path, writer) = (&self.path, &mut self.writer);
+            status::update(path, |status| {
+                writer.flush_due(status, now);
+            })?;
+        }
         Ok(LineOutcome::Continue)
     }
 
