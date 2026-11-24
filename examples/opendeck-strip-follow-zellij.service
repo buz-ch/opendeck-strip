@@ -2,11 +2,11 @@
 #
 # Install as a user unit:
 #   mkdir -p ~/.config/systemd/user
-#   cp examples/opendeck-strip-follow.service ~/.config/systemd/user/
+#   cp examples/opendeck-strip-follow-zellij.service ~/.config/systemd/user/
 #   systemctl --user daemon-reload
-#   systemctl --user enable --now opendeck-strip-follow.service
+#   systemctl --user enable --now opendeck-strip-follow-zellij.service
 #
-# `follow` connects to the first live Zellij session. Add
+# `follow-zellij` connects to the first live Zellij session. Add
 # `--session NAME` to pin one. Adjust ExecStart to the installed binary.
 
 [Unit]
@@ -15,7 +15,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.cargo/bin/opendeck-strip follow --clear-on-exit
+ExecStart=%h/.cargo/bin/opendeck-strip follow-zellij --clear-on-exit
 Restart=on-failure
 RestartSec=5
 

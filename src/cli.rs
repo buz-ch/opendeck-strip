@@ -60,6 +60,7 @@ enum Commands {
         slots: Vec<String>,
     },
     /// Apply a zj-strip-bridge stream from stdin
+    #[command(name = "apply-zellij")]
     Apply {
         /// Clear the owned slots if no line arrives for this many seconds
         #[arg(long, value_parser = positive_secs)]
@@ -68,7 +69,8 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = View::State)]
         view: View,
     },
-    /// Follow the zj-strip-bridge stream of a session and apply it
+    /// Follow the zj-strip-bridge stream of a Zellij session and apply it
+    #[command(name = "follow-zellij")]
     Follow {
         /// Zellij session; default: $ZELLIJ_SESSION_NAME if live, else the first live one
         #[arg(long)]
@@ -506,7 +508,7 @@ fn set(items: &[String], plain: bool) -> Result<()> {
     Ok(())
 }
 
-/// Apply one `SLOT TEXT` pair the way `set` does. Shared with `apply`, which passes
+/// Apply one `SLOT TEXT` pair the way `set` does. Shared with `apply-zellij`, which passes
 /// `plain = false` because the plugin escapes untrusted text itself.
 pub(crate) fn apply_set(status: &mut Status, key: &str, raw: &str, plain: bool) {
     let raw = unescape(raw);
@@ -650,8 +652,9 @@ fn apply(idle_clear: Option<Duration>, view: View) -> Result<i32> {
 }
 
 /// How a stream ends. `Stall` means the idle timeout fired; the caller decides
-/// whether that is an error (`follow` reconnects) or expected (`apply --idle-clear`).
-/// `SeqGap` means lines were lost, so only `follow` sees it: it reconnects, because
+/// whether that is an error (`follow-zellij` reconnects) or expected
+/// (`apply-zellij --idle-clear`).
+/// `SeqGap` means lines were lost, so only `follow-zellij` sees it: it reconnects, because
 /// the first frame of a connection is full.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StreamEnd {
@@ -669,7 +672,7 @@ pub(crate) enum StreamEnd {
 pub(crate) enum OnGap {
     /// One stream only, or complete documents: warn and go on reading.
     Warn,
-    /// `follow` ends the connection; the reconnect's first frame is full.
+    /// `follow-zellij` ends the connection; the reconnect's first frame is full.
     Resync,
 }
 
@@ -681,7 +684,7 @@ pub(crate) enum OnIdle {
     Stop,
 }
 
-/// What a stream remembers across the connections `follow` makes: the idle
+/// What a stream remembers across the connections `follow-zellij` makes: the idle
 /// clock, which only a line restarts. The `seq` numbering lives in the handler,
 /// since each connection starts at `hello`.
 pub(crate) struct Stream {
@@ -745,7 +748,7 @@ impl Stream {
 ///
 /// The reader runs in its own thread so an idle timeout, a throttle deadline
 /// and the stop flag can be observed while a pipe or terminal is quiet.
-/// `stream` is kept across calls by `follow`, so its idle clock spans
+/// `stream` is kept across calls by `follow-zellij`, so its idle clock spans
 /// connections. With `stop` set the reader is polled, so a signal is seen
 /// without waiting out a long stall.
 pub(crate) fn run_stream<R: Read + Send + 'static>(
@@ -1161,27 +1164,27 @@ mod tests {
     #[test]
     fn apply_and_follow_parse_their_options() {
         assert!(matches!(
-            command(&["apply", "--idle-clear", "5"]),
+            command(&["apply-zellij", "--idle-clear", "5"]),
             Commands::Apply {
                 idle_clear: Some(5),
                 view: View::State,
             }
         ));
         assert!(matches!(
-            command(&["apply"]),
+            command(&["apply-zellij"]),
             Commands::Apply {
                 idle_clear: None,
                 view: View::State,
             }
         ));
         assert!(matches!(
-            command(&["apply", "--view", "deck"]),
+            command(&["apply-zellij", "--view", "deck"]),
             Commands::Apply {
                 idle_clear: None,
                 view: View::Deck,
             }
         ));
-        match command(&["follow", "--session", "work", "--clear-on-exit"]) {
+        match command(&["follow-zellij", "--session", "work", "--clear-on-exit"]) {
             Commands::Follow {
                 session,
                 zellij,
@@ -1208,9 +1211,9 @@ mod tests {
     #[test]
     fn zero_second_options_are_usage_errors() {
         for args in [
-            ["apply", "--idle-clear", "0"],
-            ["follow", "--stall-secs", "0"],
-            ["follow", "--stall-secs", "x"],
+            ["apply-zellij", "--idle-clear", "0"],
+            ["follow-zellij", "--stall-secs", "0"],
+            ["follow-zellij", "--stall-secs", "x"],
         ] {
             let err = parse(&args).expect_err("rejected");
             assert_eq!(
@@ -1221,7 +1224,7 @@ mod tests {
             assert_eq!(err.exit_code(), 2, "{args:?}");
         }
         assert!(matches!(
-            command(&["apply", "--idle-clear", "1"]),
+            command(&["apply-zellij", "--idle-clear", "1"]),
             Commands::Apply {
                 idle_clear: Some(1),
                 view: View::State,

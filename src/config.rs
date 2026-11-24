@@ -40,7 +40,7 @@ pub struct Config {
 
     pub watch_timeout_secs: u64,
 
-    /// Expect `opendeck-strip follow` to be running; `doctor` then checks for a live session.
+    /// Expect `opendeck-strip follow-zellij` to be running; `doctor` then checks for a live session.
     pub follow: bool,
 
     /// `strip`: the 4-segment strip. `compact`: one slot (`zjsb_slot`).

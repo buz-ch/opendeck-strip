@@ -17,7 +17,7 @@ use crate::frame::{self, ParseError};
 use crate::status::{self, Status};
 use crate::zjsb::{self, document::Document};
 
-/// Which stream `follow` and `apply` read.
+/// Which stream `follow-zellij` and `apply-zellij` read.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
 pub enum View {
     /// Complete documents; the default.

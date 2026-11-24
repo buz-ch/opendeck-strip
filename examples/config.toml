@@ -9,7 +9,7 @@
 
 # ---- the Zellij deck -------------------------------------------------------
 
-# Run `opendeck-strip follow`; `doctor` then checks for a live Zellij session.
+# Run `opendeck-strip follow-zellij`; `doctor` then checks for a live Zellij session.
 follow = true
 
 # "strip": the four-segment touch strip. "compact": one dial or key.

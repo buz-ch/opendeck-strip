@@ -1,4 +1,4 @@
-//! `follow`: supervise `zellij pipe --name zjsb.follow -a view=state` and apply
+//! `follow-zellij`: supervise `zellij pipe --name zjsb.follow -a view=state` and apply
 //! the documents it carries; `--view deck` keeps the legacy frame reader.
 //!
 //! The pipe stays open by holding the child's stdin open and passing a `start`
@@ -54,7 +54,7 @@ pub fn parse_retry(text: &str) -> Result<(Duration, Duration)> {
     Ok((Duration::from_secs(min), Duration::from_secs(max)))
 }
 
-/// Whether the session `follow` may connect to is live.
+/// Whether the session `follow-zellij` may connect to is live.
 #[derive(Debug, PartialEq, Eq)]
 enum Liveness {
     Live(String),

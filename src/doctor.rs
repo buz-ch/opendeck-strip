@@ -127,7 +127,7 @@ pub fn run() -> Result<bool> {
         Ok(Some(version)) => {
             println!("zellij: {}.{}.{} on PATH", version.0, version.1, version.2);
             if version < (0, 46, 0) {
-                println!("  FAIL: `follow` needs zellij 0.46.0 or newer");
+                println!("  FAIL: `follow-zellij` needs zellij 0.46.0 or newer");
                 ok = false;
             } else {
                 println!("  ok: supports the deck pipe");

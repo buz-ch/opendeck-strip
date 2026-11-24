@@ -1,4 +1,4 @@
-//! `follow`/`apply` against the `view=state` stream: the real binary, the real
+//! `follow-zellij`/`apply-zellij` against the `view=state` stream: the real binary, the real
 //! golden documents, an isolated status file.
 
 use std::ffi::OsStr;
@@ -100,7 +100,7 @@ fn expected_default_strip() -> String {
 fn a_state_line_renders_the_default_strip_and_announces_raw() {
     let env = Env::new();
     let input = format!("{}\n{}\n", hello(0), state(1, ONE_BLOCKED));
-    let output = env.run_stdin(["apply"], &input);
+    let output = env.run_stdin(["apply-zellij"], &input);
     assert!(
         output.status.success(),
         "apply failed: {}\n{}",
@@ -140,7 +140,7 @@ fn write_stdin(child: &mut Child, text: &str) {
 fn the_same_state_twice_is_not_rewritten() {
     let env = Env::new();
     let mut child = env
-        .command(["apply"])
+        .command(["apply-zellij"])
         .stdin(Stdio::piped())
         .spawn()
         .expect("spawn apply");
@@ -178,7 +178,7 @@ fn blank_when_idle_removes_the_strip_and_the_dials() {
         state(2, IDLE)
     );
     let output = env
-        .command(["apply"])
+        .command(["apply-zellij"])
         .env("OPENDECK_STRIP_ZJSB_BLANK_WHEN_IDLE", "1")
         .stdin(Stdio::piped())
         .spawn()
@@ -205,7 +205,7 @@ fn compact_mode_writes_only_the_configured_slot() {
     let env = Env::new();
     let input = format!("{}\n{}\n", hello(0), state(1, ONE_BLOCKED));
     let output = env
-        .command(["apply"])
+        .command(["apply-zellij"])
         .env("OPENDECK_STRIP_ZJSB_MODE", "compact")
         .env("OPENDECK_STRIP_ZJSB_SLOT", "key1_2")
         .stdin(Stdio::piped())
@@ -233,7 +233,7 @@ fn a_newer_state_version_exits_two_and_leaves_the_file_alone() {
     let before = r#"{"dial1":"keep"}"#;
     fs::write(&env.status, before).unwrap();
     let output = env.run_stdin(
-        ["apply"],
+        ["apply-zellij"],
         "{\"v\":2,\"type\":\"state\",\"seq\":0,\"doc\":{}}\n",
     );
     assert_eq!(output.status.code(), Some(2));
@@ -249,7 +249,7 @@ fn a_state_gap_is_no_reason_to_reconnect_and_keeps_rendering() {
         state(1, IDLE),
         state(9, ONE_BLOCKED)
     );
-    let output = env.run_stdin(["apply"], &input);
+    let output = env.run_stdin(["apply-zellij"], &input);
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(env.status_json()["strip"], expected_default_strip());
 }
@@ -263,7 +263,7 @@ fn the_deck_view_still_applies_a_deck_frame() {
         r#"{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"D1"},"settings":{"strip_mode":"tiles"},"owned":["strip","dial1","dial2","dial3","dial4"]}"#,
         "\n"
     );
-    let output = env.run_stdin(["apply", "--view", "deck"], input);
+    let output = env.run_stdin(["apply-zellij", "--view", "deck"], input);
     assert!(output.status.success());
     let status = env.status_json();
     assert_eq!(status["strip"], "S");
@@ -313,7 +313,7 @@ fn follow_reads_state_by_default_and_once_reports_a_write() {
     let fake = env.path("zellij");
     let output = env
         .command([
-            "follow",
+            "follow-zellij",
             "--zellij",
             fake.to_str().unwrap(),
             "--session",
@@ -343,7 +343,7 @@ fn follow_once_exits_one_when_no_state_is_written() {
     let fake = env.path("zellij");
     let output = env
         .command([
-            "follow",
+            "follow-zellij",
             "--zellij",
             fake.to_str().unwrap(),
             "--session",
