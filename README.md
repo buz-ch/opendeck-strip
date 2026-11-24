@@ -320,7 +320,7 @@ opendeck-strip set labels 0
 
 ### Every key, as a commented block
 
-Every key is optional; a missing key keeps its default. A value that cannot be used is reported as a warning in the log and in `doctor` and that key keeps its default (a number outside its range is clamped), while the rest of the file stays in effect. Each key can also be set with `OPENDECK_STRIP_` plus its upper-case name (`OPENDECK_STRIP_ZJSB_MODE=compact`); booleans accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case. The five templates are TOML multi-line basic strings (`"""…"""`), so `\n` is a real newline and quotes need no escaping.
+Every key is optional; a missing key keeps its default. A value that cannot be used is reported as a warning in the log and in `doctor` and that key keeps its default (a number outside its range is clamped), while the rest of the file stays in effect. Each key can also be set with `OPENDECK_STRIP_` plus its upper-case name (`OPENDECK_STRIP_ZJSB_MODE=compact`); booleans accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case. The five templates are TOML multi-line basic strings (`"""…"""`), so `\n` is a real newline and quotes need no escaping. The closing `"""` sits on the last template line on purpose: a newline before it would add an empty line to the segment.
 
 ```toml
 # font_sans = "/path/to/SourceSans3-Regular.ttf"          # proportional regular; default: embedded
@@ -361,23 +361,19 @@ Every key is optional; a missing key keeps its default. A value that cannot be u
 # zjsb_entry_template = """
 # [b]{app|title:14}[/b]
 # [c={color}]{state_label}[/c]
-# {progress_pct|msg:22}
-# """
+# {progress_pct|msg:22}"""
 # zjsb_counts_template = """
 # [c={needs_you_color}]● {needs_you}[/c]
 # [c={failed_color}]✗ {failed}[/c]
 # [c={done_color}]✓ {done}[/c]
-# [c={working_color}]» {working}[/c]
-# """
+# [c={working_color}]» {working}[/c]"""
 # zjsb_more_template = """
 # [b]+{hidden} more[/b]
 # [c={color}]{state_label}[/c]
-# see inbox
-# """
+# see inbox"""
 # zjsb_compact_template = """
 # [c={color}]{marker} {count}[/c]
-# {app|title:8}
-# """
+# {app|title:8}"""
 # zjsb_idle_template = ""          # empty: the counts panel plus "All clear"
 ```
 

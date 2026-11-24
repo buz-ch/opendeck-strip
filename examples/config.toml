@@ -1,0 +1,89 @@
+# opendeck-strip configuration: ~/.config/opendeck-strip/config.toml
+#
+# Every key is optional; a missing key keeps its default. A value this file
+# cannot use is reported by `opendeck-strip doctor` and in the log, and that
+# key keeps its default. Environment overrides: OPENDECK_STRIP_<KEY>
+# (e.g. OPENDECK_STRIP_ZJSB_MODE=compact). Booleans: 1/true/yes/on and
+# 0/false/no/off, in any case. The status file's strip_mode and strip_gap
+# take precedence over this file.
+
+# ---- the Zellij deck -------------------------------------------------------
+
+# Run `opendeck-strip follow`; `doctor` then checks for a live Zellij session.
+follow = true
+
+# "strip": the four-segment touch strip. "compact": one dial or key.
+zjsb_mode = "strip"
+# zjsb_slot = "dial1"        # compact only: dial1..dial4 or key<row>_<col>
+
+# Nothing active: false keeps the counts panel plus "All clear"; true clears
+# the owned slots instead.
+zjsb_blank_when_idle = false
+
+# Minimum time between two writes; the latest state wins.
+zjsb_min_interval_ms = 1000
+
+# ---- templates -------------------------------------------------------------
+# The closing """ sits on the last template line on purpose: TOML would
+# otherwise keep the newline before it and the segment would get an empty line.
+# Fields: app, title, state, state_label, kind, msg, progress_pct, tasks,
+# marker, color, count, tab, pane, age, session, tab_name, plus the count
+# fields (needs_you, failed, done, working, total and the four *_color).
+
+zjsb_entry_template = """
+[b]{app|title:14}[/b]
+[c={color}]{state_label}[/c]
+{progress_pct|msg:22}"""
+
+zjsb_counts_template = """
+[c={needs_you_color}]● {needs_you}[/c]
+[c={failed_color}]✗ {failed}[/c]
+[c={done_color}]✓ {done}[/c]
+[c={working_color}]» {working}[/c]"""
+
+zjsb_more_template = """
+[b]+{hidden} more[/b]
+[c={color}]{state_label}[/c]
+see inbox"""
+
+# Compact mode only.
+# zjsb_compact_template = """
+# [c={color}]{marker} {count}[/c]
+# {app|title:8}"""
+
+# Empty: the counts panel plus the default "All clear" in strip mode, and
+# nothing in compact mode.
+zjsb_idle_template = ""
+
+# Compact alternative: one dial or key instead of the strip.
+# zjsb_mode = "compact"
+# zjsb_slot = "dial2"
+# zjsb_compact_template = """
+# [c={color}]{marker} {count}[/c]
+# {app|title:10}
+# {state_label}"""
+
+# ---- writer ----------------------------------------------------------------
+
+# The renderer sets strip_mode = "raw" itself when it first writes a strip.
+# strip_mode = "raw"
+
+# Tile gap in pixels, 0 to 32.
+# strip_gap = 28
+
+# Give all auto-sized strip segments the same font size; optionally leave the
+# counts panel (segment 1) out of the shared size.
+# strip_uniform_size = true
+# strip_uniform_skip_first = true
+
+# Size budget for the final device JPEG; lower it if the strip corrupts.
+# max_jpeg_bytes = 9000
+
+# ---- fonts and colours -----------------------------------------------------
+
+# The binary embeds Source Sans 3 and Source Code Pro, all four faces each.
+# font_sans = "/path/to/SourceSans3-Regular.ttf"
+# default_color = "#ffffff"
+# default_bg = "#000000"
+# bar_color = "#55ccff"
+# bar_bg = "#202830"

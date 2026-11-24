@@ -507,3 +507,21 @@ fn follow_defaults_off_and_parses() {
     assert!(from_toml("follow = true\n").follow);
     assert!(env(&[("OPENDECK_STRIP_FOLLOW", "yes")]).follow);
 }
+
+#[test]
+fn the_example_config_is_valid_and_keeps_the_default_templates() {
+    let mut config = Config::default();
+    config.apply_toml(
+        include_str!("../examples/config.toml"),
+        std::path::Path::new("examples/config.toml"),
+    );
+    assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+    assert!(config.follow);
+    assert_eq!(config.zjsb_mode, "strip");
+    // Real newlines in the TOML strings parse to the same templates as the
+    // defaults, which use a literal `\n`.
+    assert_eq!(
+        crate::zjsb::Options::from_config(&config),
+        crate::zjsb::Options::default()
+    );
+}
