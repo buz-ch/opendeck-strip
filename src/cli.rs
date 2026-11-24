@@ -1209,6 +1209,14 @@ mod tests {
     }
 
     #[test]
+    fn the_old_command_names_are_gone() {
+        for args in [["apply", "--view", "deck"], ["follow", "--session", "work"]] {
+            let err = parse(&args).expect_err("the old name is not an alias");
+            assert_eq!(err.kind(), clap::error::ErrorKind::InvalidSubcommand);
+        }
+    }
+
+    #[test]
     fn zero_second_options_are_usage_errors() {
         for args in [
             ["apply-zellij", "--idle-clear", "0"],
