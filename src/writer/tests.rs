@@ -211,17 +211,30 @@ fn blank_when_idle_removes_the_owned_slots() {
 }
 
 #[test]
-fn an_idle_document_writes_nothing_while_the_slot_is_known_clear() {
+fn a_first_idle_document_clears_what_the_owned_slots_held() {
     let mut config = config();
     config.zjsb_blank_when_idle = true;
     let mut writer = Writer::new(&config);
     let mut status = Status::empty();
+    status.set_slot(
+        "strip",
+        crate::status::SlotValue::Text("OLD demo done".into()),
+    );
+    status.set_slot("dial2", crate::status::SlotValue::Text("stale".into()));
+    status.set_slot("note", crate::status::SlotValue::Text("keep".into()));
+    let t0 = Instant::now();
 
-    writer.document(&mut status, &idle(), 0, Instant::now());
+    writer.document(&mut status, &idle(), 0, t0);
 
-    assert_eq!(writer.applied(), 0);
+    assert!(status.get_slot_str("strip").unwrap().is_none());
+    assert!(status.get_slot_str("dial2").unwrap().is_none());
+    assert_eq!(text(&status, "note").as_deref(), Some("keep"));
+    assert_eq!(writer.applied(), 1);
+
+    // The owned slots are known clear from here on.
+    writer.document(&mut status, &idle(), 0, t0 + INTERVAL);
+    assert_eq!(writer.applied(), 1);
     assert_eq!(writer.deadline(), None);
-    assert!(status.raw().is_empty());
 }
 
 #[test]

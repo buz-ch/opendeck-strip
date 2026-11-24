@@ -95,6 +95,15 @@ enum Pending {
     Clear,
 }
 
+/// What the status file is known to show in the owned slots.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Shown {
+    /// Nothing written yet; a previous run may have left anything there.
+    Unknown,
+    Empty,
+    Text(String),
+}
+
 /// Owned slots, throttle, unchanged suppression and `strip_mode = raw`.
 pub struct Writer {
     options: zjsb::Options,
@@ -102,8 +111,7 @@ pub struct Writer {
     slot: String,
     owned: Vec<String>,
     interval: Duration,
-    /// The text the status file is known to show; `None` = known empty.
-    shown: Option<String>,
+    shown: Shown,
     raw_set: bool,
     pending: Option<Pending>,
     last_write: Option<Instant>,
@@ -128,7 +136,7 @@ impl Writer {
             slot,
             owned,
             interval: Duration::from_millis(config.zjsb_min_interval_ms),
-            shown: None,
+            shown: Shown::Unknown,
             // Compact never writes the strip, so it never announces raw mode.
             raw_set: !strip,
             pending: None,
@@ -164,16 +172,19 @@ impl Writer {
     /// one is dropped, and clears a held frame.
     pub fn stage(&mut self, doc: &Document, now_ms: u64) {
         let next = match zjsb::render(doc, &self.options, now_ms) {
-            Some(text) if self.shown.as_deref() == Some(text.as_str()) && self.raw_set => {
+            Some(text)
+                if matches!(&self.shown, Shown::Text(shown) if *shown == text) && self.raw_set =>
+            {
                 // The newest state is already shown; a held frame would only repeat it.
                 self.pending = None;
                 return;
             }
             Some(text) => Pending::Text(text),
-            None if self.shown.is_none() => {
+            None if self.shown == Shown::Empty => {
                 self.pending = None;
                 return;
             }
+            // Unknown: the owned slots may still hold a previous run's frame.
             None => Pending::Clear,
         };
         self.pending = Some(next);
@@ -213,7 +224,7 @@ impl Writer {
 
     /// The owned slots were cleared by the idle, stall or grace machinery.
     pub fn cleared(&mut self) {
-        self.shown = None;
+        self.shown = Shown::Empty;
     }
 
     fn write(&mut self, status: &mut Status, frame: Pending, now: Instant) {
@@ -222,7 +233,7 @@ impl Writer {
                 for slot in &self.owned {
                     cli::remove_slot(status, slot);
                 }
-                self.shown = None;
+                self.shown = Shown::Empty;
             }
             Pending::Text(text) => {
                 if self.strip && !self.raw_set {
@@ -230,7 +241,7 @@ impl Writer {
                     self.raw_set = true;
                 }
                 cli::apply_set(status, &self.slot, &text, false);
-                self.shown = Some(text);
+                self.shown = Shown::Text(text);
             }
         }
         self.last_write = Some(now);
