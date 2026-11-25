@@ -73,7 +73,8 @@ Each prompt is the preamble plus: `Your task is T<n>.`
 
 ## T0: branch and docs
 
-`git switch -c LineLayout`, then commit the design and this plan. Leave
+Switch to `LineLayout`, creating it from `main` if it does not exist. Commit
+the design and this plan if they have uncommitted changes. Leave
 `preview/stats-block-entries-right-mono.png` untracked.
 
 ## T1: config and template cells
