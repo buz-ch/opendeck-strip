@@ -188,7 +188,7 @@ Fitting and truncation:
 - If the grid is too wide at the final size, the rightmost column is narrowed to the remaining width and its overflowing cells end in `…`.
 - If not even `…` fits in that column, the column is dropped from every row and the same rule applies to the next column to the left. Cells that lost content because of a dropped column end in `…`. Column 1 is never dropped.
 - If the rows do not fit vertically, the top rows are kept, as for other strip values.
-- Any narrowing or dropping sets the truncated flag, which the plugin reports and which drives the text-only degradation in `continuous` mode.
+- Any narrowing or dropping sets the truncated flag: the plugin logs `strip text was truncated to fit` and `raw-string` prints a note.
 
 A tab in an unsegmented strip value used to render as four spaces. In `raw` and `continuous` mode it now makes columns; this includes `watch` commands whose output contains tabs.
 
