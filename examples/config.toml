@@ -24,8 +24,8 @@ zjsb_blank_when_idle = false
 zjsb_min_interval_ms = 1000
 
 # ---- templates -------------------------------------------------------------
-# The closing """ sits on the last template line on purpose: TOML would
-# otherwise keep the newline before it and the segment would get an empty line.
+# Empty lines in a template are ignored. {age} is computed when a document
+# arrives and is not refreshed until the next one.
 # Fields: app, title, state, state_label, kind, msg, progress_pct, tasks,
 # marker, color, count, tab, pane, age, session, tab_name, plus the count
 # fields (needs_you, failed, done, working, total and the four *_color).

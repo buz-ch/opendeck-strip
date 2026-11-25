@@ -33,7 +33,7 @@ opendeck-strip follow-zellij --clear-on-exit   # show the deck of a running zj-s
 - OpenDeck with the [AKP05 device plugin](https://github.com/ambiso/opendeck-akp05) v0.12.0 or newer. Continuous mode also needs N4E firmware 02.014 or newer.
 - For `raw` mode: an AKP05 build with raw strip mode and `strip_raw = true` in its config.
 - For `apply-zellij` and `follow-zellij`: Zellij 0.46.0 or newer with a running `zj-strip-bridge` plugin.
-- Rust 1.88 or newer to build.
+- Rust 1.89 or newer to build.
 
 Installation, usage and configuration are described below. Supported device: Mirabox N4E.
 
@@ -87,7 +87,7 @@ opendeck-strip raw-clear                # leave raw mode
 
 ## Build
 
-Requirements: a Rust toolchain, version 1.88 or newer. No system libraries are needed.
+Requirements: a Rust toolchain, version 1.89 or newer. No system libraries are needed.
 
 ```sh
 cargo build --release
@@ -320,7 +320,7 @@ opendeck-strip set labels 0
 
 ### Every key, as a commented block
 
-Every key is optional; a missing key keeps its default. A value that cannot be used is reported as a warning in the log and in `doctor` and that key keeps its default (a number outside its range is clamped), while the rest of the file stays in effect. Each key can also be set with `OPENDECK_STRIP_` plus its upper-case name (`OPENDECK_STRIP_ZJSB_MODE=compact`); booleans accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case. The five templates are TOML multi-line basic strings (`"""…"""`), so `\n` is a real newline and quotes need no escaping. The closing `"""` sits on the last template line on purpose: a newline before it would add an empty line to the segment.
+Every key is optional; a missing key keeps its default. A value that cannot be used is reported as a warning in the log and in `doctor` and that key keeps its default (a number outside its range is clamped), while the rest of the file stays in effect. Each key can also be set with `OPENDECK_STRIP_` plus its upper-case name (`OPENDECK_STRIP_ZJSB_MODE=compact`); booleans accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case. The five templates are TOML multi-line basic strings (`"""…"""`), so `\n` is a real newline and quotes need no escaping. Empty lines in a template are ignored, so the position of the closing `"""` does not matter. `{age}` is computed when a document arrives and is not refreshed until the next one.
 
 ```toml
 # font_sans = "/path/to/SourceSans3-Regular.ttf"          # proportional regular; default: embedded

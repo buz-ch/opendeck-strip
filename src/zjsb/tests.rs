@@ -919,3 +919,22 @@ fn the_examples_apply_their_keys_to_the_defaults() {
         Some("{a}\n[b]\"q\"[/b]")
     );
 }
+
+#[test]
+fn backslashes_in_values_do_not_become_escapes() {
+    use super::template::sanitize;
+    assert_eq!(sanitize("C:\\", 64), "C:\\\\");
+    assert_eq!(super::cap("a\\\\n b\\nc".to_owned()), "a\\\\n b\\nc");
+}
+
+#[test]
+fn unsynced_documents_keep_the_deck() {
+    use crate::config::Config;
+    let doc = Document {
+        synced: false,
+        ..Default::default()
+    };
+    let mut w = crate::writer::Writer::new(&Config::default());
+    w.stage(&doc, 0);
+    assert!(w.deadline().is_none());
+}

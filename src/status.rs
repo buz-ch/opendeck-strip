@@ -352,10 +352,29 @@ pub fn load(path: &Path) -> Result<Status> {
 /// Load, modify, write. Missing files start empty; invalid files are an error so a
 /// malformed hand edit is never silently clobbered.
 pub fn update(path: &Path, f: impl FnOnce(&mut Status)) -> Result<Status> {
+    // An advisory lock on a sidecar file keeps two writers from losing each
+    // other's update; it is released when `_lock` drops. Failing to lock is not
+    // fatal: the update then runs as it did without one.
+    let _lock = lock_for_update(path);
     let mut status = load(path)?;
     f(&mut status);
     write_atomic(path, &status)?;
     Ok(status)
+}
+
+fn lock_for_update(path: &Path) -> Option<fs::File> {
+    let lock_path = PathBuf::from(format!("{}.lock", path.display()));
+    if let Some(parent) = lock_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        let _ = fs::create_dir_all(parent);
+    }
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(lock_path)
+        .ok()?;
+    file.lock().ok()?;
+    Some(file)
 }
 
 pub fn write_atomic(path: &Path, status: &Status) -> Result<()> {

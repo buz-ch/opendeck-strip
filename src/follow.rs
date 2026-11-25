@@ -168,8 +168,18 @@ pub fn run(options: Options) -> Result<i32> {
         let end = match end {
             Ok(end) => end,
             Err(err) => {
-                log::error!("stopped reading the deck stream: {err:#}");
-                return Ok(1);
+                log::error!("the stream failed: {err:#}");
+                if options.once {
+                    return Ok(1);
+                }
+                // Reconnect after a backoff rather than leaving a stale deck behind.
+                let wait = backoff.next();
+                log::info!("reconnecting in {:.0}s", wait.as_secs_f64());
+                if wait_or_stop(wait, &stop, &path, &options, &mut *handler, &mut stream)? {
+                    finish(&path, &options, &stop, handler.owned())?;
+                    return Ok(0);
+                }
+                continue;
             }
         };
         // A held state frame is written before a reconnect, never carried over.

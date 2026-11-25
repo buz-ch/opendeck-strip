@@ -104,6 +104,15 @@ fn describe_hello(map: &serde_json::Map<String, Value>) -> String {
 /// One `state` document for the log: what this connection read. The records are
 /// `app/state`, the first few of them, so a deck that shows nothing can be
 /// traced to a document that carries nothing.
+/// A line cut to a length that is safe to log.
+fn clip(line: &str) -> String {
+    const MAX: usize = 200;
+    match line.char_indices().nth(MAX) {
+        Some((end, _)) => format!("{}… ({} bytes)", &line[..end], line.len()),
+        None => line.to_string(),
+    }
+}
+
 fn describe_state(doc: &Document) -> String {
     let records: Vec<&Record> = doc.sessions.iter().flat_map(|s| s.panes.iter()).collect();
     let names: Vec<&str> = doc.sessions.iter().map(|s| s.name.as_str()).collect();
@@ -114,8 +123,13 @@ fn describe_state(doc: &Document) -> String {
         .collect();
     let more = records.len().saturating_sub(shown.len());
     format!(
-        "state: synced={} {} session(s) [{}], {} record(s), {} on deck{}{}",
+        "state: synced={}{} {} session(s) [{}], {} record(s), {} on deck{}{}",
         doc.synced,
+        if doc.truncated {
+            " (truncated: counts may be low)"
+        } else {
+            ""
+        },
         names.len(),
         names.join(", "),
         records.len(),
@@ -216,6 +230,12 @@ impl Writer {
     /// A due frame stays in `pending` for [`Writer::flush_due`]; an unchanged
     /// one is dropped, and clears a held frame.
     pub fn stage(&mut self, doc: &Document, now_ms: u64) {
+        // Without attention state the plugin's empty document is no information,
+        // not "nothing is on deck": keep what is shown.
+        if !doc.synced {
+            log::debug!("document is not synced; keeping the current deck");
+            return;
+        }
         let next = match zjsb::render(doc, &self.options, now_ms) {
             Some(text)
                 if matches!(&self.shown, Shown::Text(shown) if *shown == text) && self.raw_set =>
@@ -269,6 +289,8 @@ impl Writer {
 
     /// The owned slots were cleared by the idle, stall or grace machinery.
     pub fn cleared(&mut self) {
+        // A held frame is stale too; writing it would undo the clear.
+        self.pending = None;
         self.shown = Shown::Empty;
     }
 
@@ -327,6 +349,8 @@ pub(crate) struct StateHandler {
     path: PathBuf,
     writer: Writer,
     seq: frame::Seq,
+    /// The last logged document summary; only changes are logged.
+    last_logged: Option<String>,
 }
 
 impl StateHandler {
@@ -335,6 +359,7 @@ impl StateHandler {
             path,
             writer: Writer::new(config),
             seq: frame::Seq::default(),
+            last_logged: None,
         }
     }
 }
@@ -347,9 +372,15 @@ impl Handler for StateHandler {
     fn line(&mut self, line: &str, now: Instant, now_ms: u64) -> Result<LineOutcome> {
         let parsed = match parse_state_line(line) {
             Ok(parsed) => parsed,
-            Err(ParseError::TooOld) => return Ok(LineOutcome::TooOld),
+            Err(ParseError::TooOld) => {
+                log::error!(
+                    "state frame is newer than version {}; update opendeck-strip",
+                    frame::KNOWN_VERSION
+                );
+                return Ok(LineOutcome::TooOld);
+            }
             Err(ParseError::Skip) => {
-                log::warn!("skipping unparsable state line: {line}");
+                log::warn!("skipping unparsable state line: {}", clip(line));
                 self.seq.lost();
                 return Ok(LineOutcome::Continue);
             }
@@ -364,7 +395,11 @@ impl Handler for StateHandler {
         let Some(doc) = parsed.doc else {
             return Ok(LineOutcome::Continue);
         };
-        log::info!("{}", describe_state(&doc));
+        let described = describe_state(&doc);
+        if self.last_logged.as_deref() != Some(described.as_str()) {
+            log::info!("{described}");
+            self.last_logged = Some(described);
+        }
         self.writer.stage(&doc, now_ms);
         if self.writer.pending_due(now) {
             let (path, writer) = (&self.path, &mut self.writer);
@@ -452,7 +487,7 @@ impl Handler for DeckHandler {
                 return Ok(LineOutcome::TooOld);
             }
             Err(ParseError::Skip) => {
-                log::warn!("skipping unparsable deck line: {line}");
+                log::warn!("skipping unparsable deck line: {}", clip(line));
                 self.seq.lost();
                 return Ok(LineOutcome::Continue);
             }

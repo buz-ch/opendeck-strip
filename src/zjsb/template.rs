@@ -30,7 +30,7 @@ const DEFAULT_WIDTH: usize = 64;
 const MAX_LINES: usize = 8;
 
 /// Make untrusted text safe inside a strip string: no controls, no segment
-/// separator, no markup, truncated on a character boundary.
+/// separator, no markup, no escape sequences, truncated on a character boundary.
 pub fn sanitize(text: &str, max_chars: usize) -> String {
     let cleaned: String = text
         .chars()
@@ -42,7 +42,8 @@ pub fn sanitize(text: &str, max_chars: usize) -> String {
         out.pop();
         out.push('…');
     }
-    out.replace('[', "[[")
+    // `apply_set` unescapes `\n`, `\t` and `\\`, so a backslash must survive that.
+    out.replace('\\', "\\\\").replace('[', "[[")
 }
 
 impl Template {

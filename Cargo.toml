@@ -2,7 +2,7 @@
 name = "opendeck-strip"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 description = "Status text on the keys, dials and touch strip of a Mirabox N4E through OpenDeck"
 license = "MIT"
 publish = false

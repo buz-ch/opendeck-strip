@@ -411,10 +411,30 @@ pub fn entry_ctx(e: &Entry, c: &Counts, now_ms: u64) -> Ctx {
     m
 }
 
+/// Split on the literal two-character `\n` line separator, skipping an
+/// escaped backslash pair so a value's own `\\n` is not a break.
+fn split_lines(s: &str) -> Vec<&str> {
+    let bytes = s.as_bytes();
+    let (mut lines, mut start, mut i) = (Vec::new(), 0, 0);
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 1 < bytes.len() {
+            if bytes[i + 1] == b'n' {
+                lines.push(&s[start..i]);
+                start = i + 2;
+            }
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    lines.push(&s[start..]);
+    lines
+}
+
 /// Drop trailing lines past the segment budget.
 fn cap(s: String) -> String {
     let mut out = String::new();
-    for (i, line) in s.split("\\n").enumerate() {
+    for (i, line) in split_lines(&s).into_iter().enumerate() {
         if i > 0 && out.chars().count() + line.chars().count() + 2 > MAX_SEGMENT {
             break;
         }

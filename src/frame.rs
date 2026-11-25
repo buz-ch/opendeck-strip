@@ -127,9 +127,9 @@ impl Seq {
             return false;
         };
         let (next, gap) = match *self {
-            Self::Start => (seq + 1, false),
-            Self::Next(expected) => (seq + 1, seq != expected),
-            Self::Lost => (seq + 1, true),
+            Self::Start => (seq.saturating_add(1), false),
+            Self::Next(expected) => (seq.saturating_add(1), seq != expected),
+            Self::Lost => (seq.saturating_add(1), true),
         };
         *self = Self::Next(next);
         gap

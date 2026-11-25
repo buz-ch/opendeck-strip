@@ -435,6 +435,13 @@ fn convert_num(text: &str, real: bool, min: Limit, max: Option<f64>) -> Result<S
             trim_num(high.to_string()),
         ));
     }
+    // The fields are `f32` or at most `u32` wide in practice; refuse what they cannot hold.
+    if real && n.abs() > f64::from(f32::MAX) {
+        return Err(Fault::Keep("is too large".to_owned()));
+    }
+    if !real && !(0.0..=f64::from(u32::MAX)).contains(&n) {
+        return Err(Fault::Keep("is out of range".to_owned()));
+    }
     Ok(stored)
 }
 
@@ -556,7 +563,7 @@ fn is_zjsb_slot(s: &str) -> bool {
         .is_some_and(|(row, col)| {
             [row, col]
                 .iter()
-                .all(|x| x.parse::<u8>().is_ok_and(|n| (1..=9).contains(&n)))
+                .all(|x| matches!(x.as_bytes(), [b'1'..=b'9']))
         })
 }
 

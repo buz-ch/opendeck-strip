@@ -718,6 +718,13 @@ impl Stream {
         self.last_line.unwrap_or(self.started).elapsed()
     }
 
+    /// How long this connection has been silent: since its start or the last line.
+    fn idle_since(&self, connected: Instant) -> Duration {
+        self.last_line
+            .map_or(connected, |t| t.max(connected))
+            .elapsed()
+    }
+
     /// Clear the owned slots once per silent stretch of `idle` or more. A
     /// reconnect does not restart the clock; only a line does. True when this
     /// call cleared, so the writer can consider the slots empty.
@@ -791,6 +798,7 @@ fn run_lines(
     stream: &mut Stream,
 ) -> Result<StreamEnd> {
     let path = status::status_path();
+    let connected = Instant::now();
     // A short poll tick makes a signal visible without waiting out a long stall.
     let poll = stop.map(|_| Duration::from_millis(200));
     loop {
@@ -829,17 +837,27 @@ fn run_lines(
         let Some(item) = received else {
             let now = Instant::now();
             handler.tick(now)?;
-            if let Some(idle) = idle
-                && stream.clear_if_idle(&path, idle, handler.owned())?
-            {
-                handler.cleared();
-                if on_idle == OnIdle::Stop {
+            if let Some(idle) = idle {
+                if stream.clear_if_idle(&path, idle, handler.owned())? {
+                    handler.cleared();
+                }
+                // The clear happens once per silent stretch, but every silent
+                // connection is replaced, including one started after a clear.
+                if on_idle == OnIdle::Stop && stream.idle_since(connected) >= idle {
                     return Ok(StreamEnd::Stall);
                 }
             }
             continue;
         };
-        let line = item?;
+        let line = match item {
+            Ok(line) => line,
+            Err(err) if err.kind() == io::ErrorKind::InvalidData => {
+                log::warn!("skipping a line that is not valid UTF-8");
+                stream.line_arrived();
+                continue;
+            }
+            Err(err) => return Err(err.into()),
+        };
         stream.line_arrived();
         let line = line.trim_end_matches(['\n', '\r']);
         if line.trim().is_empty() {
