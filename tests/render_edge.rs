@@ -531,3 +531,271 @@ fn raw_slices_roundtrip_through_raw_frame() {
     assert_eq!(raw_frame(&slices), frame);
     assert_eq!(raw_frame(std::slice::from_ref(&frame)), frame);
 }
+
+// Tab columns on the full-width strip. Positions are read from coloured
+// backgrounds and glyphs, never from glyph shapes.
+
+const GRID_TEXT: &str = "[bg=#ff0000]A[/bg]\t[bg=#00ff00]B[/bg]\n\
+                         [bg=#0000ff]CCCC[/bg]\t[bg=#ffff00]B[/bg]";
+
+fn raw_image(renderer: &Renderer, value: &SlotValue) -> RgbImage {
+    renderer
+        .render_strip(value, StripMode::Raw, 0, Detail::Full)
+        .images
+        .remove(0)
+}
+
+fn x_span(image: &RgbImage, color: impl Fn([u8; 3]) -> bool) -> (u32, u32) {
+    let mut min = u32::MAX;
+    let mut max = 0;
+    for (x, _, pixel) in image.enumerate_pixels() {
+        if color(pixel.0) {
+            min = min.min(x);
+            max = max.max(x);
+        }
+    }
+    assert!(min != u32::MAX, "colour not found");
+    (min, max)
+}
+
+fn is_red(p: [u8; 3]) -> bool {
+    p[0] > 150 && p[1] < 60 && p[2] < 60
+}
+
+fn is_green(p: [u8; 3]) -> bool {
+    p[1] > 150 && p[0] < 60 && p[2] < 60
+}
+
+fn is_blue(p: [u8; 3]) -> bool {
+    p[2] > 150 && p[0] < 60 && p[1] < 60
+}
+
+fn is_yellow(p: [u8; 3]) -> bool {
+    p[0] > 150 && p[1] > 150 && p[2] < 60
+}
+
+#[test]
+fn tabs_in_a_dial_render_as_four_spaces() {
+    let renderer = renderer();
+    let with_tab = render_value(&renderer, &SlotValue::from_text("a\tb"), Detail::Full);
+    let with_spaces = render_value(&renderer, &SlotValue::from_text("a    b"), Detail::Full);
+    assert_eq!(with_tab.images, with_spaces.images);
+}
+
+#[test]
+fn tabs_in_a_segmented_strip_render_as_four_spaces() {
+    let renderer = renderer();
+    let with_tab = renderer.render_strip(
+        &SlotValue::from_text("a\tb|c"),
+        StripMode::Raw,
+        28,
+        Detail::Full,
+    );
+    let with_spaces = renderer.render_strip(
+        &SlotValue::from_text("a    b|c"),
+        StripMode::Raw,
+        28,
+        Detail::Full,
+    );
+    assert_eq!(with_tab.images, with_spaces.images);
+}
+
+#[test]
+fn tabs_in_tiles_render_as_four_spaces() {
+    let renderer = renderer();
+    let tabbed = SlotValue::from_text("ab\tcd\nef\tgh");
+    let spaced = SlotValue::from_text("ab    cd\nef    gh");
+    let with_tab = renderer.render_strip(&tabbed, StripMode::Tiles, 28, Detail::Full);
+    let with_spaces = renderer.render_strip(&spaced, StripMode::Tiles, 28, Detail::Full);
+    assert_eq!(with_tab.images, with_spaces.images);
+}
+
+#[test]
+fn tabs_with_word_wrap_render_as_four_spaces() {
+    let mut renderer = renderer();
+    renderer.config.word_wrap = true;
+    let with_tab = renderer.render_strip(
+        &SlotValue::from_text("a\tb"),
+        StripMode::Raw,
+        0,
+        Detail::Full,
+    );
+    let with_spaces = renderer.render_strip(
+        &SlotValue::from_text("a    b"),
+        StripMode::Raw,
+        0,
+        Detail::Full,
+    );
+    assert_eq!(with_tab.images, with_spaces.images);
+}
+
+#[test]
+fn a_column_starts_at_the_same_x_in_rows_with_different_first_cells() {
+    let frame = raw_image(&renderer(), &SlotValue::from_text(GRID_TEXT));
+    let (red_start, red_end) = x_span(&frame, is_red);
+    let (green_start, _) = x_span(&frame, is_green);
+    let (blue_start, _) = x_span(&frame, is_blue);
+    let (yellow_start, _) = x_span(&frame, is_yellow);
+    assert_eq!(green_start, yellow_start, "column 2 is not aligned");
+    assert_eq!(red_start, blue_start, "column 1 is not aligned");
+    assert!(green_start > red_end, "column 2 does not follow column 1");
+}
+
+#[test]
+fn a_line_without_tabs_widens_column_one() {
+    let renderer = renderer();
+    let title = "[bg=#ff0000]a long title line[/bg]\n";
+    let rows = "[bg=#00ff00]A[/bg]\t[bg=#0000ff]B[/bg]";
+    let without = raw_image(&renderer, &SlotValue::from_text(rows));
+    let with = raw_image(&renderer, &SlotValue::from_text(format!("{title}{rows}")));
+    assert!(
+        x_span(&with, is_blue).0 > x_span(&without, is_blue).0,
+        "the title line did not widen column 1"
+    );
+}
+
+#[test]
+fn spans_values_make_grids_like_text_values() {
+    let renderer = renderer();
+    let span = |text: &str, bg: &str| SpanSpec {
+        text: text.to_owned(),
+        bg: Some(bg.to_owned()),
+        ..Default::default()
+    };
+    let value = SlotValue::Styled(Styles {
+        spans: Some(vec![
+            span("A", "#ff0000"),
+            span("\tB", "#00ff00"),
+            span("\nCCCC", "#0000ff"),
+            span("\tB", "#ffff00"),
+        ]),
+        ..Default::default()
+    });
+    let frame = raw_image(&renderer, &value);
+    assert_eq!(
+        x_span(&frame, is_green).0,
+        x_span(&frame, is_yellow).0,
+        "spans value did not form aligned columns"
+    );
+}
+
+#[test]
+fn grids_are_left_aligned_and_ignore_the_global_align() {
+    use opendeck_strip::render::layout::Align;
+    let mut renderer = renderer();
+    let plain = SlotValue::from_text(GRID_TEXT);
+    let left = raw_image(&renderer, &plain);
+    renderer.config.align = Align::Right;
+    let global_right = raw_image(&renderer, &plain);
+    assert_eq!(left, global_right, "global align moved a grid");
+    renderer.config.align = Align::Center;
+    assert_eq!(
+        left,
+        raw_image(&renderer, &plain),
+        "global centre moved a grid"
+    );
+}
+
+#[test]
+fn a_grid_honours_its_own_align() {
+    let renderer = renderer();
+    let left_value = SlotValue::from_text(GRID_TEXT);
+    let right_value = SlotValue::Styled(Styles {
+        text: Some(GRID_TEXT.to_owned()),
+        align: Some("right".to_owned()),
+        ..Default::default()
+    });
+    let left = raw_image(&renderer, &left_value);
+    let right = raw_image(&renderer, &right_value);
+    assert_ne!(left, right, "align was not honoured");
+    let (left_red, _) = x_span(&left, is_red);
+    let (right_red, _) = x_span(&right, is_red);
+    assert!(
+        right_red > left_red,
+        "right-aligned grid did not move right"
+    );
+    let left_width = x_span(&left, is_yellow).1 - left_red;
+    let right_width = x_span(&right, is_yellow).1 - right_red;
+    assert_eq!(left_width, right_width, "the grid changed width");
+}
+
+#[test]
+fn the_global_align_still_applies_without_a_tab() {
+    use opendeck_strip::render::layout::Align;
+    let mut renderer = renderer();
+    let value = SlotValue::from_text("ab\ncd");
+    renderer.config.align = Align::Left;
+    let left = raw_image(&renderer, &value);
+    renderer.config.align = Align::Right;
+    let right = raw_image(&renderer, &value);
+    assert_ne!(left, right, "global align was ignored without a tab");
+}
+
+#[test]
+fn text_only_detail_keeps_grid_columns() {
+    let renderer = renderer();
+    let text = "[c=#ff0000]A[/c]\t[c=#00ff00]B[/c]\n\
+                [c=#0000ff]CCCC[/c]\t[c=#ffff00]B[/c]";
+    let value = SlotValue::from_text(text);
+    let text_only = renderer
+        .render_strip(&value, StripMode::Raw, 0, Detail::TextOnly)
+        .images
+        .remove(0);
+    assert_eq!(
+        x_span(&text_only, is_green).0,
+        x_span(&text_only, is_yellow).0,
+        "TextOnly lost the grid"
+    );
+    let spaced = SlotValue::from_text(text.replace('\t', "    "));
+    let with_spaces = renderer
+        .render_strip(&spaced, StripMode::Raw, 0, Detail::TextOnly)
+        .images
+        .remove(0);
+    assert_ne!(text_only, with_spaces, "TextOnly did not form a grid");
+}
+
+#[test]
+fn column_gap_moves_the_second_column() {
+    let mut renderer = renderer();
+    let value = SlotValue::from_text(GRID_TEXT);
+    renderer.config.column_gap = 0;
+    let tight = raw_image(&renderer, &value);
+    renderer.config.column_gap = 8;
+    let wide = raw_image(&renderer, &value);
+    assert!(
+        x_span(&wide, is_green).0 > x_span(&tight, is_green).0,
+        "column_gap was not wired to the renderer"
+    );
+}
+
+#[test]
+fn render_config_takes_column_gap_from_config() {
+    use opendeck_strip::config::Config;
+    use opendeck_strip::render::RenderConfig;
+    let config = Config {
+        column_gap: 7,
+        ..Config::default()
+    };
+    assert_eq!(RenderConfig::from_config(&config).column_gap, 7);
+}
+
+#[test]
+fn a_continuous_strip_with_tabs_is_a_grid() {
+    let renderer = renderer();
+    let with_tab = renderer.render_strip(
+        &SlotValue::from_text("ab\tcd\nef\tgh"),
+        StripMode::Continuous,
+        28,
+        Detail::Full,
+    );
+    let with_spaces = renderer.render_strip(
+        &SlotValue::from_text("ab    cd\nef    gh"),
+        StripMode::Continuous,
+        28,
+        Detail::Full,
+    );
+    assert_ne!(
+        with_tab.images, with_spaces.images,
+        "continuous mode did not form a grid"
+    );
+}

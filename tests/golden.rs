@@ -146,6 +146,24 @@ fn golden_strip_raw() {
 }
 
 #[test]
+fn golden_strip_grid() {
+    // The zjsb `lines` output for the `busy` scenario: five rows, four cells.
+    let busy = concat!(
+        "[c=orange]● 2[/c]\t[b]claude[/b]\t[c=orange]needs login[/c]\tlogin expired\n",
+        "[c=red]✗ 1[/c]\t[b]codex[/b]\t[c=orange]needs approval[/c]\tapply patch\n",
+        "[c=green]✓ 1[/c]\t[b]opencode[/b]\t[c=red]failed[/c]\trate limited\n",
+        "[c=#55ccff]» 2[/c]\t[b]claude[/b]\t[c=green]done[/c]\t\n",
+        "\t[b]+2 more[/b]\t[c=#55ccff]working[/c]\tsee inbox",
+    );
+    strip(
+        "strip_grid",
+        &SlotValue::from_text(busy),
+        StripMode::Raw,
+        28,
+    );
+}
+
+#[test]
 fn golden_raw_test_pattern() {
     let renderer = Renderer::embedded();
     compare("raw_test_pattern", &renderer.raw_test_pattern());

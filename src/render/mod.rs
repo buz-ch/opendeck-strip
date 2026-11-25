@@ -13,7 +13,8 @@ use crate::status::{SlotValue, Styles};
 use self::canvas::Canvas;
 use self::fonts::Fonts;
 use self::layout::{
-    Align, DrawRequest, LayoutOptions, Rect, SizeSpec, VAlign, auto_fit_size, draw_text,
+    Align, DrawRequest, Grid, LayoutOptions, Rect, SizeSpec, VAlign, auto_fit_size, draw_text,
+    has_tab,
 };
 use self::markup::{Run, parse_text, plain_of_lines, spans_to_lines};
 
@@ -39,6 +40,7 @@ pub struct RenderConfig {
     pub valign: VAlign,
     pub bar_color: Rgb,
     pub bar_bg: Rgb,
+    pub column_gap: u32,
 }
 
 impl RenderConfig {
@@ -57,6 +59,7 @@ impl RenderConfig {
             valign: VAlign::parse(&config.valign).unwrap_or(VAlign::Middle),
             bar_color: Rgb::parse(&config.bar_color).unwrap_or(Rgb(85, 204, 255)),
             bar_bg: Rgb::parse(&config.bar_bg).unwrap_or(Rgb(32, 40, 48)),
+            column_gap: config.column_gap,
         }
     }
 }
@@ -73,6 +76,8 @@ pub struct SlotSpec {
     pub color: Rgb,
     pub bg: Rgb,
     pub align: Align,
+    /// The alignment the value itself set; a grid uses it, else `Left`.
+    pub explicit_align: Option<Align>,
     pub valign: VAlign,
     pub bar: Option<f32>,
 }
@@ -130,10 +135,10 @@ impl Renderer {
             .and_then(|s| s.bg.as_deref())
             .and_then(Rgb::parse)
             .unwrap_or(self.config.default_bg);
-        let align = styled
+        let explicit_align = styled
             .and_then(|s| s.align.as_deref())
-            .and_then(Align::parse)
-            .unwrap_or(self.config.align);
+            .and_then(Align::parse);
+        let align = explicit_align.unwrap_or(self.config.align);
         let valign = styled
             .and_then(|s| s.valign.as_deref())
             .and_then(VAlign::parse)
@@ -150,6 +155,7 @@ impl Renderer {
             color,
             bg,
             align,
+            explicit_align,
             valign,
             bar,
         }
@@ -208,6 +214,7 @@ impl Renderer {
                 height: height as f32,
             },
             detail,
+            None,
         );
         Rendered {
             images: vec![canvas.into_image()],
@@ -231,6 +238,7 @@ impl Renderer {
         };
         let logical_height = height as f32;
         let segments = self.spec_segments(value);
+        let grid = self.strip_grid(&segments, value, mode);
         let bg = segments
             .first()
             .map(|s| s.bg)
@@ -310,7 +318,7 @@ impl Renderer {
                 }
                 _ => segment,
             };
-            truncated |= self.draw_segment(&mut canvas, segment, rect, detail);
+            truncated |= self.draw_segment(&mut canvas, segment, rect, detail, grid);
         }
 
         let image = canvas.into_image();
@@ -334,6 +342,34 @@ impl Renderer {
         Rendered { images, truncated }
     }
 
+    /// Tab columns apply to one full-width segment in raw or continuous mode
+    /// without word wrap.
+    fn strip_grid(
+        &self,
+        segments: &[SlotSpec],
+        value: &SlotValue,
+        mode: crate::status::StripMode,
+    ) -> Option<Grid> {
+        let [segment] = segments else {
+            return None;
+        };
+        if self.config.word_wrap || !has_tab(&segment.lines) {
+            return None;
+        }
+        match mode {
+            crate::status::StripMode::Raw | crate::status::StripMode::Continuous => Some(Grid {
+                gap_spaces: self.config.column_gap,
+                mono: styled_font_is_mono(value),
+            }),
+            crate::status::StripMode::Tiles => {
+                log::warn!(
+                    "tabs in a strip value need raw or continuous mode; drawing them as spaces"
+                );
+                None
+            }
+        }
+    }
+
     fn layout_options(&self) -> LayoutOptions {
         LayoutOptions {
             min_size: self.config.min_size,
@@ -352,6 +388,7 @@ impl Renderer {
         spec: &SlotSpec,
         rect: Rect,
         detail: Detail,
+        grid: Option<Grid>,
     ) -> bool {
         let options = self.layout_options();
         let bar = if detail == Detail::TextOnly {
@@ -364,16 +401,20 @@ impl Renderer {
         } else {
             spec.lines.clone()
         };
+        let align = match grid {
+            Some(_) => spec.explicit_align.unwrap_or(Align::Left),
+            None => spec.align,
+        };
         let request = DrawRequest {
             lines: &lines,
             base_size: spec.base_size,
-            align: spec.align,
+            align,
             valign: spec.valign,
             color: spec.color,
             bar,
             bar_color: self.config.bar_color,
             bar_bg: self.config.bar_bg,
-            grid: None,
+            grid,
             options: &options,
         };
         draw_text(canvas, rect, &request, &self.fonts).truncated
@@ -505,6 +546,7 @@ impl Renderer {
                 height: 68.0,
             },
             Detail::Full,
+            None,
         );
         for (index, (_, color)) in RAW_RULER_BANDS.iter().enumerate() {
             let i = index as i32;
@@ -543,6 +585,7 @@ impl Renderer {
                 height: 46.0,
             },
             Detail::Full,
+            None,
         );
         for index in 0..4 {
             let label = self.spec(&styled_value(
@@ -560,6 +603,7 @@ impl Renderer {
                     height: 48.0,
                 },
                 Detail::Full,
+                None,
             );
         }
 
