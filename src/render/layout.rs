@@ -76,7 +76,8 @@ pub struct LayoutOptions {
     pub min_size: f32,
     pub max_size: f32,
     pub line_height: f32,
-    pub padding: f32,
+    pub padding_horizontal: f32,
+    pub padding_vertical: f32,
     pub word_wrap: bool,
     pub default_align: Align,
     pub default_valign: VAlign,
@@ -142,12 +143,12 @@ fn bar_height_for(rect: Rect, has_bar: bool) -> f32 {
     }
 }
 
-fn inner_rect(rect: Rect, bar_height: f32, padding: f32) -> Rect {
+fn inner_rect(rect: Rect, bar_height: f32, horizontal: f32, vertical: f32) -> Rect {
     Rect {
-        x: rect.x + padding,
-        y: rect.y + padding,
-        width: (rect.width - padding * 2.0).max(1.0),
-        height: (rect.height - padding * 2.0 - bar_height).max(1.0),
+        x: rect.x + horizontal,
+        y: rect.y + vertical,
+        width: (rect.width - horizontal * 2.0).max(1.0),
+        height: (rect.height - vertical * 2.0 - bar_height).max(1.0),
     }
 }
 
@@ -160,7 +161,12 @@ pub fn auto_fit_size(
     options: &LayoutOptions,
     fonts: &Fonts,
 ) -> f32 {
-    let inner = inner_rect(rect, bar_height_for(rect, has_bar), options.padding);
+    let inner = inner_rect(
+        rect,
+        bar_height_for(rect, has_bar),
+        options.padding_horizontal,
+        options.padding_vertical,
+    );
     fit(
         lines,
         SizeSpec::Auto,
@@ -178,9 +184,14 @@ pub fn draw_text(
     request: &DrawRequest<'_>,
     fonts: &Fonts,
 ) -> DrawResult {
-    let padding = request.options.padding;
+    let padding_vertical = request.options.padding_vertical;
     let bar_height = bar_height_for(rect, request.bar.is_some());
-    let inner = inner_rect(rect, bar_height, padding);
+    let inner = inner_rect(
+        rect,
+        bar_height,
+        request.options.padding_horizontal,
+        padding_vertical,
+    );
 
     let (size, lines, truncated) = match request.grid {
         Some(grid) => {
@@ -202,11 +213,17 @@ pub fn draw_text(
 
     if let Some(fraction) = request.bar {
         let fraction = fraction.clamp(0.0, 1.0);
-        let bar_y = rect.y + rect.height - padding - bar_height;
-        let width = (rect.width - padding * 2.0).max(0.0);
-        canvas.fill_rect(rect.x + padding, bar_y, width, bar_height, request.bar_bg);
+        let bar_y = rect.y + rect.height - padding_vertical - bar_height;
+        let width = (rect.width - request.options.padding_horizontal * 2.0).max(0.0);
         canvas.fill_rect(
-            rect.x + padding,
+            rect.x + request.options.padding_horizontal,
+            bar_y,
+            width,
+            bar_height,
+            request.bar_bg,
+        );
+        canvas.fill_rect(
+            rect.x + request.options.padding_horizontal,
             bar_y,
             width * fraction,
             bar_height,
@@ -1092,7 +1109,8 @@ fn default_options() -> LayoutOptions {
         min_size: 1.0,
         max_size: 1000.0,
         line_height: 1.0,
-        padding: 0.0,
+        padding_horizontal: 0.0,
+        padding_vertical: 0.0,
         word_wrap: false,
         default_align: Align::Left,
         default_valign: VAlign::Top,
@@ -1108,7 +1126,8 @@ mod tests {
             min_size: 8.0,
             max_size: 64.0,
             line_height: 1.15,
-            padding: 2.0,
+            padding_horizontal: 2.0,
+            padding_vertical: 2.0,
             word_wrap: false,
             default_align: Align::Center,
             default_valign: VAlign::Middle,
@@ -1390,7 +1409,8 @@ mod tests {
                 height: h,
             },
             0.0,
-            opts.padding,
+            opts.padding_horizontal,
+            opts.padding_vertical,
         );
         let fitted = fit_grid(
             lines,

@@ -39,6 +39,8 @@ fn defaults_are_sane() {
     assert_eq!(config.strip_mode(), StripMode::Continuous);
     assert!(config.max_font_size >= config.min_font_size);
     assert!(config.redraw_hz > 0.0);
+    assert_eq!(config.padding_horizontal, 4.0);
+    assert_eq!(config.padding_vertical, 4.0);
     assert!(config.warnings.is_empty());
 }
 
@@ -61,7 +63,7 @@ fn parses_toml() {
 #[test]
 fn every_key_loads_from_the_file_and_the_environment() {
     // Fields of `Config` minus `warnings`.
-    assert_eq!(KEYS.len(), 39);
+    assert_eq!(KEYS.len(), 40);
     let defaults = Config::default();
     let mut text = String::new();
     let mut vars: Vec<(std::ffi::OsString, std::ffi::OsString)> = Vec::new();
@@ -197,7 +199,7 @@ fn unreadable_file_is_reported() {
 #[test]
 fn clamps_say_what_they_did() {
     let config = from_toml(
-        "min_font_size = 1\nline_height = 0.5\npadding = -1\nstrip_gap = 50\nmax_jpeg_bytes = 100\nredraw_hz = 0\nwatch_timeout_secs = 0\nzjsb_min_interval_ms = 0\n",
+        "min_font_size = 1\nline_height = 0.5\npadding_horizontal = -1\npadding_vertical = -1\nstrip_gap = 50\nmax_jpeg_bytes = 100\nredraw_hz = 0\nwatch_timeout_secs = 0\nzjsb_min_interval_ms = 0\n",
     );
     assert_eq!(
         config.warnings,
@@ -205,7 +207,8 @@ fn clamps_say_what_they_did() {
             format!("{AT}line_height = 0.5 is below 0.8; using 0.8"),
             format!("{AT}max_jpeg_bytes = 100 is below 1000; using 1000"),
             format!("{AT}min_font_size = 1 is below 4; using 4"),
-            format!("{AT}padding = -1 is below 0; using 0"),
+            format!("{AT}padding_horizontal = -1 is below 0; using 0"),
+            format!("{AT}padding_vertical = -1 is below 0; using 0"),
             format!("{AT}redraw_hz = 0 must be above 0; using 2"),
             format!("{AT}strip_gap = 50 is above 32; using 32"),
             format!("{AT}watch_timeout_secs = 0 must be above 0; using 5"),
@@ -214,7 +217,8 @@ fn clamps_say_what_they_did() {
     );
     assert_eq!(config.min_font_size, 4.0);
     assert_eq!(config.line_height, 0.8);
-    assert_eq!(config.padding, 0.0);
+    assert_eq!(config.padding_horizontal, 0.0);
+    assert_eq!(config.padding_vertical, 0.0);
     assert_eq!(config.strip_gap, 32);
     assert_eq!(config.max_jpeg_bytes, 1000);
     assert_eq!(config.redraw_hz, 2.0);
@@ -233,13 +237,40 @@ fn max_font_size_follows_min_font_size() {
 }
 
 #[test]
+fn padding_axes_are_independent() {
+    let config = from_toml("padding_horizontal = 8\npadding_vertical = 2\n");
+    assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+    assert_eq!(config.padding_horizontal, 8.0);
+    assert_eq!(config.padding_vertical, 2.0);
+
+    let config = env(&[
+        ("OPENDECK_STRIP_PADDING_HORIZONTAL", "8"),
+        ("OPENDECK_STRIP_PADDING_VERTICAL", "2"),
+    ]);
+    assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+    assert_eq!(config.padding_horizontal, 8.0);
+    assert_eq!(config.padding_vertical, 2.0);
+}
+
+#[test]
+fn the_replaced_padding_key_is_refused_and_ignored() {
+    let config = from_toml("padding = 8\n");
+    assert_eq!(
+        config.warnings,
+        [format!("{AT}unknown key padding; ignored")]
+    );
+    assert_eq!(config.padding_horizontal, 4.0);
+    assert_eq!(config.padding_vertical, 4.0);
+}
+
+#[test]
 fn non_finite_numbers_are_refused() {
-    let config = from_toml("line_height = nan\npadding = inf\n");
+    let config = from_toml("line_height = nan\npadding_vertical = inf\n");
     assert_eq!(
         config.warnings,
         [
             format!("{AT}line_height = nan is not a finite number; using 1.15"),
-            format!("{AT}padding = inf is not a finite number; using 4"),
+            format!("{AT}padding_vertical = inf is not a finite number; using 4"),
         ]
     );
 }
@@ -420,6 +451,7 @@ fn env_unknown_key() {
     let config = env(&[
         ("OPENDECK_STRIP_NOPE", "1"),
         ("OPENDECK_STRIP_follow", "true"),
+        ("OPENDECK_STRIP_PADDING", "8"),
         ("OPENDECK_STRIP_CONFIG", "/elsewhere.toml"),
     ]);
     assert_eq!(
@@ -427,6 +459,7 @@ fn env_unknown_key() {
         [
             "OPENDECK_STRIP_NOPE is not a known key; ignored",
             "OPENDECK_STRIP_follow is not a known key; ignored",
+            "OPENDECK_STRIP_PADDING is not a known key; ignored",
         ]
     );
 }

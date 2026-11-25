@@ -184,6 +184,7 @@ Cells:
 
 Fitting and truncation:
 
+- The grid is laid out inside the slot's inner box: `padding_horizontal` insets the left and right edges, `padding_vertical` the top and bottom.
 - Auto-fit measures the grid: its width is the sum of the column widths plus the gaps, its height the line count. An explicit `size` skips auto-fit; the rules below still apply.
 - If the grid is too wide at the final size, the rightmost column is narrowed to the remaining width and its overflowing cells end in `…`.
 - If not even `…` fits in that column, the column is dropped from every row and the same rule applies to the next column to the left. Cells that lost content because of a dropped column end in `…`. Column 1 is never dropped.

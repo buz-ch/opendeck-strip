@@ -558,6 +558,19 @@ fn x_span(image: &RgbImage, color: impl Fn([u8; 3]) -> bool) -> (u32, u32) {
     (min, max)
 }
 
+fn y_span(image: &RgbImage, color: impl Fn([u8; 3]) -> bool) -> (u32, u32) {
+    let mut min = u32::MAX;
+    let mut max = 0;
+    for (_, y, pixel) in image.enumerate_pixels() {
+        if color(pixel.0) {
+            min = min.min(y);
+            max = max.max(y);
+        }
+    }
+    assert!(min != u32::MAX, "colour not found");
+    (min, max)
+}
+
 fn is_red(p: [u8; 3]) -> bool {
     p[0] > 150 && p[1] < 60 && p[2] < 60
 }
@@ -780,14 +793,45 @@ fn column_gap_moves_the_second_column() {
 }
 
 #[test]
-fn render_config_takes_column_gap_from_config() {
+fn render_config_takes_the_layout_insets_from_config() {
     use opendeck_strip::config::Config;
     use opendeck_strip::render::RenderConfig;
     let config = Config {
         column_gap: 7,
+        padding_horizontal: 9.0,
+        padding_vertical: 3.0,
         ..Config::default()
     };
-    assert_eq!(RenderConfig::from_config(&config).column_gap, 7);
+    let resolved = RenderConfig::from_config(&config);
+    assert_eq!(resolved.column_gap, 7);
+    assert_eq!(resolved.padding_horizontal, 9.0);
+    assert_eq!(resolved.padding_vertical, 3.0);
+}
+
+#[test]
+fn padding_axes_move_the_content_independently() {
+    let mut renderer = renderer();
+    let value = SlotValue::from_text(GRID_TEXT);
+    let base = raw_image(&renderer, &value);
+    let base_x = x_span(&base, is_red).0;
+    let base_y = y_span(&base, is_red).0;
+
+    renderer.config.padding_horizontal = 20.0;
+    let horizontal = raw_image(&renderer, &value);
+    assert!(
+        x_span(&horizontal, is_red).0 >= base_x + 15,
+        "horizontal padding did not move the grid"
+    );
+    assert_eq!(y_span(&horizontal, is_red).0, base_y);
+
+    let mut renderer = Renderer::embedded();
+    renderer.config.padding_vertical = 12.0;
+    let vertical = raw_image(&renderer, &value);
+    assert_eq!(x_span(&vertical, is_red).0, base_x);
+    assert!(
+        y_span(&vertical, is_red).0 > base_y,
+        "vertical padding did not move the grid"
+    );
 }
 
 #[test]

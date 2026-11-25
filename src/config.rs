@@ -21,7 +21,10 @@ pub struct Config {
     pub min_font_size: f32,
     pub max_font_size: f32,
     pub line_height: f32,
-    pub padding: f32,
+    /// Left and right inner padding of a slot, in pixels.
+    pub padding_horizontal: f32,
+    /// Top and bottom inner padding of a slot, in pixels.
+    pub padding_vertical: f32,
     /// Spaces between the columns of a strip grid.
     pub column_gap: u32,
     pub word_wrap: bool,
@@ -83,7 +86,8 @@ impl Default for Config {
             min_font_size: 8.0,
             max_font_size: 96.0,
             line_height: 1.15,
-            padding: 4.0,
+            padding_horizontal: 4.0,
+            padding_vertical: 4.0,
             column_gap: 2,
             word_wrap: false,
             align: "center".to_owned(),
@@ -543,7 +547,8 @@ key_table! {
     // Raised to `min_font_size` by `normalise` when below it.
     "max_font_size" => max_font_size: Kind::Num { real: true, min: Limit::Any, max: None },
     "line_height" => line_height: Kind::Num { real: true, min: Limit::AtLeast(0.8), max: None },
-    "padding" => padding: Kind::Num { real: true, min: Limit::AtLeast(0.0), max: None },
+    "padding_horizontal" => padding_horizontal: Kind::Num { real: true, min: Limit::AtLeast(0.0), max: None },
+    "padding_vertical" => padding_vertical: Kind::Num { real: true, min: Limit::AtLeast(0.0), max: None },
     "column_gap" => column_gap: Kind::Num { real: false, min: Limit::AtLeast(0.0), max: Some(16.0) },
     "word_wrap" => word_wrap: Kind::Bool,
     "align" => align: Kind::Enum("one of left, center, right", |s| Align::parse(s).is_some()),

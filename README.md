@@ -282,7 +282,8 @@ The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFI
 | `min_font_size` | 8.0 | Lower auto-fit limit, clamped to at least 4 |
 | `max_font_size` | 96.0 | Upper auto-fit limit |
 | `line_height` | 1.15 | Line height factor, at least 0.8 |
-| `padding` | 4.0 | Inner padding in pixels |
+| `padding_horizontal` | 4.0 | Left and right inner padding in pixels |
+| `padding_vertical` | 4.0 | Top and bottom inner padding in pixels |
 | `word_wrap` | false | Wrap at spaces |
 | `column_gap` | 2 | Spaces between tab columns in a full-width strip grid, clamped to 0–16 |
 | `align` | `center` | `left`, `center` or `right` |
@@ -308,6 +309,8 @@ The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFI
 | `zjsb_more_template` | see below | The `+N more` segment |
 | `zjsb_compact_template` | see below | The one entry of compact mode |
 | `zjsb_idle_template` | empty | The whole strip (or compact slot) when nothing is active; empty means the counts panel plus `All clear` |
+
+`padding` was replaced by `padding_horizontal` and `padding_vertical`. A config that still sets `padding` is reported as an unknown key and is ignored, so replace it with the two keys.
 
 The plugin reads the config once at start-up; restart OpenDeck after editing it. The status file keys `strip_mode` and `strip_gap` take precedence and apply without a restart. `labels` exists only in the status file.
 
@@ -341,7 +344,8 @@ Every key is optional; a missing key keeps its default. A value that cannot be u
 # min_font_size = 8.0              # lower auto-fit limit, at least 4
 # max_font_size = 96.0             # upper auto-fit limit
 # line_height = 1.15               # line height factor, at least 0.8
-# padding = 4.0                    # inner padding in pixels
+# padding_horizontal = 4.0         # left and right inner padding in pixels
+# padding_vertical = 4.0           # top and bottom inner padding in pixels
 # word_wrap = false                # true | false: wrap at spaces
 # column_gap = 2                   # spaces between tab columns, 0 to 16
 # align = "center"                 # left | center | right

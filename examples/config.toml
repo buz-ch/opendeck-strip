@@ -94,5 +94,7 @@ zjsb_idle_template = ""
 # font_sans = "/path/to/SourceSans3-Regular.ttf"
 # default_color = "#ffffff"
 # default_bg = "#000000"
+# padding_horizontal = 4.0     # left and right inner padding in pixels
+# padding_vertical = 4.0       # top and bottom inner padding in pixels
 # bar_color = "#55ccff"
 # bar_bg = "#202830"
