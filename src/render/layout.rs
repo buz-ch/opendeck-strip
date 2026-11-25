@@ -64,6 +64,13 @@ pub enum SizeSpec {
     Px(f32),
 }
 
+/// Draw an unsplit strip value as tab-separated columns.
+#[derive(Clone, Copy, Debug)]
+pub struct Grid {
+    pub gap_spaces: u32,
+    pub mono: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct LayoutOptions {
     pub min_size: f32,
@@ -92,6 +99,7 @@ pub struct DrawRequest<'a> {
     pub bar: Option<f32>,
     pub bar_color: Rgb,
     pub bar_bg: Rgb,
+    pub grid: Option<Grid>,
     pub options: &'a LayoutOptions,
 }
 
@@ -174,10 +182,54 @@ pub fn draw_text(
     let bar_height = bar_height_for(rect, request.bar.is_some());
     let inner = inner_rect(rect, bar_height, padding);
 
+    let (size, lines, truncated) = match request.grid {
+        Some(grid) => {
+            let fitted = fit_grid(
+                request.lines,
+                request.base_size,
+                &inner,
+                grid,
+                request.options,
+                fonts,
+            );
+            let truncated = fitted.truncated;
+            (fitted.size, fitted.lines(), truncated)
+        }
+        None => fit_lines(request, &inner, fonts),
+    };
+
+    paint_lines(canvas, rect, &inner, &lines, request, fonts);
+
+    if let Some(fraction) = request.bar {
+        let fraction = fraction.clamp(0.0, 1.0);
+        let bar_y = rect.y + rect.height - padding - bar_height;
+        let width = (rect.width - padding * 2.0).max(0.0);
+        canvas.fill_rect(rect.x + padding, bar_y, width, bar_height, request.bar_bg);
+        canvas.fill_rect(
+            rect.x + padding,
+            bar_y,
+            width * fraction,
+            bar_height,
+            request.bar_color,
+        );
+    }
+
+    DrawResult {
+        font_size: size,
+        truncated,
+    }
+}
+
+/// Fit and truncate plain lines, then paint them into `inner`.
+fn fit_lines(
+    request: &DrawRequest<'_>,
+    inner: &Rect,
+    fonts: &Fonts,
+) -> (f32, Vec<LineLayout>, bool) {
     let (size, mut lines, mut truncated) = fit(
         request.lines,
         request.base_size,
-        &inner,
+        inner,
         request.options.word_wrap,
         request.options,
         fonts,
@@ -194,7 +246,17 @@ pub fn draw_text(
             truncated = true;
         }
     }
+    (size, lines, truncated)
+}
 
+fn paint_lines(
+    canvas: &mut Canvas,
+    rect: Rect,
+    inner: &Rect,
+    lines: &[LineLayout],
+    request: &DrawRequest<'_>,
+    fonts: &Fonts,
+) {
     let total_height: f32 = lines.iter().map(|l| l.height).sum();
     let y_start = inner.y + (inner.height - total_height) * request.valign.factor();
     let mut y = y_start;
@@ -207,7 +269,7 @@ pub fn draw_text(
     );
     canvas.set_clip(Some(clip));
 
-    for line in &lines {
+    for line in lines {
         let line_top = y;
         let baseline =
             (line_top + (line.height - (line.ascent - line.descent)) * 0.5 + line.ascent).round();
@@ -234,25 +296,11 @@ pub fn draw_text(
     }
 
     canvas.clear_clip();
+}
 
-    if let Some(fraction) = request.bar {
-        let fraction = fraction.clamp(0.0, 1.0);
-        let bar_y = rect.y + rect.height - padding - bar_height;
-        let width = (rect.width - padding * 2.0).max(0.0);
-        canvas.fill_rect(rect.x + padding, bar_y, width, bar_height, request.bar_bg);
-        canvas.fill_rect(
-            rect.x + padding,
-            bar_y,
-            width * fraction,
-            bar_height,
-            request.bar_color,
-        );
-    }
-
-    DrawResult {
-        font_size: size,
-        truncated,
-    }
+/// Whether any run of any line holds a tab.
+pub fn has_tab(lines: &[Vec<Run>]) -> bool {
+    lines.iter().flatten().any(|run| run.text.contains('\t'))
 }
 
 fn fit(
@@ -311,6 +359,382 @@ fn keep_visible_lines(lines: Vec<LineLayout>, height: f32) -> Vec<LineLayout> {
         out.push(line);
     }
     out
+}
+
+fn keep_visible_rows(rows: Vec<GridRow>, height: f32) -> Vec<GridRow> {
+    let mut out = Vec::new();
+    let mut used = 0.0;
+    for row in rows {
+        if used + row.height > height + 0.5 && !out.is_empty() {
+            break;
+        }
+        used += row.height;
+        out.push(row);
+    }
+    out
+}
+
+#[derive(Clone, Debug)]
+struct CellLayout {
+    placements: Vec<PlacedRun>,
+    width: f32,
+    ascent: f32,
+    descent: f32,
+    max_size: f32,
+    /// Plain text of the cell, for truncation tests.
+    text: String,
+}
+
+#[derive(Clone, Debug)]
+struct GridRow {
+    cells: Vec<CellLayout>,
+    ascent: f32,
+    descent: f32,
+    height: f32,
+}
+
+struct FittedGrid {
+    size: f32,
+    rows: Vec<GridRow>,
+    columns: Vec<f32>,
+    gap: f32,
+    truncated: bool,
+}
+
+impl FittedGrid {
+    fn width(&self) -> f32 {
+        columns_width(&self.columns, self.gap)
+    }
+
+    /// Rows with the cell placements shifted into their columns.
+    fn lines(&self) -> Vec<LineLayout> {
+        let width = self.width();
+        self.rows
+            .iter()
+            .map(|row| {
+                let mut placements = Vec::new();
+                let mut x = 0.0;
+                for (index, column_width) in self.columns.iter().enumerate() {
+                    if let Some(cell) = row.cells.get(index) {
+                        for placed in &cell.placements {
+                            let mut placed = placed.clone();
+                            placed.x += x;
+                            placements.push(placed);
+                        }
+                    }
+                    x += column_width + self.gap;
+                }
+                LineLayout {
+                    placements,
+                    width,
+                    ascent: row.ascent,
+                    descent: row.descent,
+                    height: row.height,
+                }
+            })
+            .collect()
+    }
+}
+
+fn columns_width(columns: &[f32], gap: f32) -> f32 {
+    let widths: f32 = columns.iter().sum();
+    widths + gap * columns.len().saturating_sub(1) as f32
+}
+
+/// Split a line's runs at tabs into cells, keeping each run's style across a
+/// tab. A line without a tab is one cell; an empty line is one empty cell.
+fn split_cells(runs: &[Run]) -> Vec<Vec<Run>> {
+    let mut cells: Vec<Vec<Run>> = Vec::new();
+    let mut current: Vec<Run> = Vec::new();
+    for run in runs {
+        let mut pieces = run.text.split('\t').peekable();
+        while let Some(piece) = pieces.next() {
+            if !piece.is_empty() {
+                let mut run = run.clone();
+                run.text = piece.to_owned();
+                push_merged(&mut current, run);
+            }
+            if pieces.peek().is_some() {
+                cells.push(std::mem::take(&mut current));
+            }
+        }
+    }
+    cells.push(current);
+    cells
+}
+
+fn split_cells_all(lines: &[Vec<Run>]) -> Vec<Vec<Vec<Run>>> {
+    let mut rows: Vec<Vec<Vec<Run>>> = lines.iter().map(|line| split_cells(line)).collect();
+    if rows.is_empty() {
+        rows.push(vec![Vec::new()]);
+    }
+    rows
+}
+
+fn space_advance(size: f32, mono: bool, fonts: &Fonts) -> f32 {
+    match fonts.resolve(mono, false, false, ' ') {
+        GlyphSource::Glyph { face, id } => scaled(face, size, size).h_advance(id),
+        GlyphSource::Placeholder { .. } => size * 0.6,
+    }
+}
+
+fn grid_gap(gap_spaces: u32, size: f32, mono: bool, fonts: &Fonts) -> f32 {
+    if gap_spaces == 0 {
+        return 0.0;
+    }
+    gap_spaces as f32 * space_advance(size, mono, fonts)
+}
+
+fn measure_cell(runs: &[Run], size: f32, fonts: &Fonts) -> CellLayout {
+    let measured = measure(runs, size, fonts);
+    let text = measured
+        .placements
+        .iter()
+        .map(|placed| placed.run.text.as_str())
+        .collect();
+    CellLayout {
+        placements: measured.placements,
+        width: measured.width,
+        ascent: measured.ascent,
+        descent: measured.descent,
+        max_size: measured.max_size,
+        text,
+    }
+}
+
+fn measure_row(cells: &[Vec<Run>], size: f32, options: &LayoutOptions, fonts: &Fonts) -> GridRow {
+    let cells: Vec<CellLayout> = cells
+        .iter()
+        .map(|cell| measure_cell(cell, size, fonts))
+        .collect();
+    let mut ascent = 0.0f32;
+    let mut descent = 0.0f32;
+    let mut max_size = 0.0f32;
+    for cell in &cells {
+        ascent = ascent.max(cell.ascent);
+        descent = descent.min(cell.descent);
+        max_size = max_size.max(cell.max_size);
+    }
+    let height = (max_size * options.line_height)
+        .max(ascent - descent)
+        .max(1.0);
+    GridRow {
+        cells,
+        ascent,
+        descent,
+        height,
+    }
+}
+
+fn build_grid(
+    cells: &[Vec<Vec<Run>>],
+    size: f32,
+    grid: Grid,
+    options: &LayoutOptions,
+    fonts: &Fonts,
+) -> (Vec<GridRow>, f32) {
+    let gap = grid_gap(grid.gap_spaces, size, grid.mono, fonts);
+    let rows = cells
+        .iter()
+        .map(|row| measure_row(row, size, options, fonts))
+        .collect();
+    (rows, gap)
+}
+
+fn column_widths(rows: &[GridRow]) -> Vec<f32> {
+    let count = rows.iter().map(|row| row.cells.len()).max().unwrap_or(1);
+    (0..count)
+        .map(|index| {
+            rows.iter()
+                .filter_map(|row| row.cells.get(index))
+                .map(|cell| cell.width)
+                .fold(0.0, f32::max)
+        })
+        .collect()
+}
+
+fn grid_fits(rows: &[GridRow], columns: &[f32], gap: f32, inner: &Rect) -> bool {
+    let height: f32 = rows.iter().map(|row| row.height).sum();
+    height <= inner.height + 0.5 && columns_width(columns, gap) <= inner.width + 0.5
+}
+
+fn fit_grid(
+    source: &[Vec<Run>],
+    base: SizeSpec,
+    inner: &Rect,
+    grid: Grid,
+    options: &LayoutOptions,
+    fonts: &Fonts,
+) -> FittedGrid {
+    let cells = split_cells_all(source);
+    let (size, mut rows, gap, mut truncated) = match base {
+        SizeSpec::Px(px) => {
+            let min = options.min_size.max(1.0);
+            let max = options.max_size.max(min);
+            let size = px.clamp(min, max);
+            let (rows, gap) = build_grid(&cells, size, grid, options, fonts);
+            (size, rows, gap, false)
+        }
+        SizeSpec::Auto => {
+            let mut lo = options.min_size.max(1.0);
+            let mut hi = options.max_size.max(lo);
+            let mut best: Option<(f32, Vec<GridRow>, f32)> = None;
+            for _ in 0..24 {
+                let mid = (lo + hi) * 0.5;
+                let (rows, gap) = build_grid(&cells, mid, grid, options, fonts);
+                let columns = column_widths(&rows);
+                if grid_fits(&rows, &columns, gap, inner) {
+                    best = Some((mid, rows, gap));
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            match best {
+                Some((size, rows, gap)) => (size, rows, gap, false),
+                None => {
+                    let size = options.min_size.max(1.0);
+                    let (rows, gap) = build_grid(&cells, size, grid, options, fonts);
+                    (size, rows, gap, true)
+                }
+            }
+        }
+    };
+
+    // Drop the bottom rows that do not fit, then measure columns from the
+    // remaining rows so a short grid is not narrowed by a hidden row.
+    let total_height: f32 = rows.iter().map(|row| row.height).sum();
+    if total_height > inner.height + 0.5 {
+        rows = keep_visible_rows(rows, inner.height);
+        truncated = true;
+    }
+    let mut columns = column_widths(&rows);
+
+    while columns_width(&columns, gap) > inner.width + 0.5 {
+        let last = columns.len() - 1;
+        if last == 0 {
+            truncate_column(&mut rows, 0, size, inner.width, fonts, &mut truncated);
+            columns = column_widths(&rows);
+            if columns[0] > inner.width {
+                columns[0] = inner.width;
+            }
+            break;
+        }
+        let before: f32 = columns[..last].iter().sum();
+        let avail = inner.width - before - gap * last as f32;
+        let needed = rows
+            .iter()
+            .filter_map(|row| {
+                row.cells
+                    .get(last)
+                    .filter(|cell| cell.width > avail + 0.5)
+                    .map(|cell| ellipsis_width(cell, size, fonts))
+            })
+            .fold(0.0, f32::max);
+        if avail > 0.5 && needed <= avail + 0.5 {
+            truncate_column(&mut rows, last, size, avail, fonts, &mut truncated);
+            columns = column_widths(&rows);
+            if columns[last] > avail {
+                columns[last] = avail;
+            }
+            break;
+        }
+        drop_column(&mut rows, last, size, columns[last - 1], fonts);
+        columns = column_widths(&rows);
+        truncated = true;
+    }
+
+    FittedGrid {
+        size,
+        rows,
+        columns,
+        gap,
+        truncated,
+    }
+}
+
+fn cell_style(cell: &CellLayout) -> Run {
+    cell.placements
+        .last()
+        .map(|placed| placed.run.clone())
+        .unwrap_or_default()
+}
+
+fn ellipsis_width(cell: &CellLayout, size: f32, fonts: &Fonts) -> f32 {
+    let run = Run {
+        text: "…".to_owned(),
+        ..cell_style(cell)
+    };
+    measure_width(std::slice::from_ref(&run), size, fonts)
+}
+
+fn cell_as_line(cell: &CellLayout) -> LineLayout {
+    LineLayout {
+        placements: cell.placements.clone(),
+        width: cell.width,
+        ascent: cell.ascent,
+        descent: cell.descent,
+        height: 0.0,
+    }
+}
+
+fn cell_from_line(cell: &CellLayout, line: LineLayout) -> CellLayout {
+    let text = line
+        .placements
+        .iter()
+        .map(|placed| placed.run.text.as_str())
+        .collect();
+    CellLayout {
+        placements: line.placements,
+        width: line.width,
+        text,
+        ..cell.clone()
+    }
+}
+
+fn empty_cell(size: f32, fonts: &Fonts) -> CellLayout {
+    measure_cell(&[], size, fonts)
+}
+
+fn truncate_column(
+    rows: &mut [GridRow],
+    index: usize,
+    size: f32,
+    max_width: f32,
+    fonts: &Fonts,
+    truncated: &mut bool,
+) {
+    for row in rows {
+        if let Some(cell) = row.cells.get_mut(index)
+            && cell.width > max_width + 0.5
+        {
+            let line = truncate_line(&cell_as_line(cell), size, max_width, fonts);
+            *cell = cell_from_line(cell, line);
+            *truncated = true;
+        }
+    }
+}
+
+/// Drop `index` from every row. Rows that held content there get `…` appended
+/// to the cell in the last kept column, narrowed to that column.
+fn drop_column(rows: &mut [GridRow], index: usize, size: f32, keep_width: f32, fonts: &Fonts) {
+    for row in rows {
+        let lost_content = row
+            .cells
+            .get(index)
+            .is_some_and(|cell| !cell.text.is_empty());
+        row.cells.truncate(index);
+        if !lost_content {
+            continue;
+        }
+        while row.cells.len() < index {
+            row.cells.push(empty_cell(size, fonts));
+        }
+        let cell = &row.cells[index - 1];
+        let line = truncate_line_forced(&cell_as_line(cell), size, keep_width, fonts);
+        let cell = cell_from_line(cell, line);
+        row.cells[index - 1] = cell;
+    }
 }
 
 fn layout_lines(
@@ -585,7 +1009,22 @@ fn same_style(a: &Run, b: &Run) -> bool {
 }
 
 fn truncate_line(line: &LineLayout, size: f32, max_width: f32, fonts: &Fonts) -> LineLayout {
-    if line.width <= max_width + 0.5 {
+    truncate_line_impl(line, size, max_width, fonts, false)
+}
+
+/// Like `truncate_line`, but always ends in `…`, even a cell that fits.
+fn truncate_line_forced(line: &LineLayout, size: f32, max_width: f32, fonts: &Fonts) -> LineLayout {
+    truncate_line_impl(line, size, max_width, fonts, true)
+}
+
+fn truncate_line_impl(
+    line: &LineLayout,
+    size: f32,
+    max_width: f32,
+    fonts: &Fonts,
+    force: bool,
+) -> LineLayout {
+    if !force && line.width <= max_width + 0.5 {
         return line.clone();
     }
     let fallback_style = line
@@ -694,6 +1133,7 @@ mod tests {
             bar: None,
             bar_color: Rgb::WHITE,
             bar_bg: Rgb::BLACK,
+            grid: None,
             options: &opts,
         };
         let result = draw_text(
@@ -790,6 +1230,7 @@ mod tests {
             bar: None,
             bar_color: Rgb::WHITE,
             bar_bg: Rgb::BLACK,
+            grid: None,
             options: &opts,
         };
         draw_text(
@@ -843,6 +1284,7 @@ mod tests {
             bar: None,
             bar_color: Rgb::WHITE,
             bar_bg: Rgb::BLACK,
+            grid: None,
             options: &opts,
         };
         draw_text(
@@ -858,5 +1300,326 @@ mod tests {
         );
         let (_, top, _, bottom) = bounds(&canvas);
         assert!(bottom - top > 25);
+    }
+
+    const RED: Rgb = Rgb(255, 0, 0);
+
+    fn red(text: &str) -> Run {
+        Run {
+            text: text.to_owned(),
+            color: Some(RED),
+            ..Default::default()
+        }
+    }
+
+    fn draw_grid(
+        lines: &[Vec<Run>],
+        w: u32,
+        h: u32,
+        align: Align,
+        size: SizeSpec,
+        gap_spaces: u32,
+        mono: bool,
+    ) -> (Canvas, DrawResult) {
+        let mut canvas = Canvas::new(w, h, Rgb::BLACK);
+        let opts = options();
+        let request = DrawRequest {
+            lines,
+            base_size: size,
+            align,
+            valign: VAlign::Middle,
+            color: Rgb::WHITE,
+            bar: None,
+            bar_color: Rgb::WHITE,
+            bar_bg: Rgb::BLACK,
+            grid: Some(Grid { gap_spaces, mono }),
+            options: &opts,
+        };
+        let result = draw_text(
+            &mut canvas,
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                width: w as f32,
+                height: h as f32,
+            },
+            &request,
+            Fonts::embedded(),
+        );
+        (canvas, result)
+    }
+
+    /// Bounds of the red cell; glyph interiors are not always fully opaque.
+    fn red_bounds(canvas: &Canvas) -> Option<(i32, i32, i32, i32)> {
+        let mut bounds: Option<(i32, i32, i32, i32)> = None;
+        for y in 0..canvas.height as i32 {
+            for x in 0..canvas.width as i32 {
+                let reddish = canvas
+                    .get(x, y)
+                    .is_some_and(|p| p.0 > 150 && p.1 < 100 && p.2 < 100);
+                if reddish {
+                    let b = bounds.get_or_insert((x, y, x, y));
+                    b.0 = b.0.min(x);
+                    b.1 = b.1.min(y);
+                    b.2 = b.2.max(x);
+                    b.3 = b.3.max(y);
+                }
+            }
+        }
+        bounds
+    }
+
+    fn red_x(canvas: &Canvas) -> i32 {
+        red_bounds(canvas).expect("the red cell is drawn").0
+    }
+
+    fn cell_texts(
+        lines: &[Vec<Run>],
+        w: f32,
+        h: f32,
+        size: SizeSpec,
+        gap_spaces: u32,
+        mono: bool,
+    ) -> (Vec<Vec<String>>, bool) {
+        let opts = options();
+        let inner = inner_rect(
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                width: w,
+                height: h,
+            },
+            0.0,
+            opts.padding,
+        );
+        let fitted = fit_grid(
+            lines,
+            size,
+            &inner,
+            Grid { gap_spaces, mono },
+            &opts,
+            Fonts::embedded(),
+        );
+        let texts = fitted
+            .rows
+            .iter()
+            .map(|row| row.cells.iter().map(|cell| cell.text.clone()).collect())
+            .collect();
+        (texts, fitted.truncated)
+    }
+
+    fn same_image(a: &Canvas, b: &Canvas) -> bool {
+        a.width == b.width
+            && a.height == b.height
+            && (0..a.height as i32).all(|y| (0..a.width as i32).all(|x| a.get(x, y) == b.get(x, y)))
+    }
+
+    #[test]
+    fn tab_without_a_grid_still_draws_four_spaces() {
+        let with_tab = vec![vec![Run::plain("\ta")]];
+        let with_spaces = vec![vec![Run::plain("    a")]];
+        let (a, _) = draw(&with_tab, 200, 60, Align::Left, SizeSpec::Px(20.0));
+        let (b, _) = draw(&with_spaces, 200, 60, Align::Left, SizeSpec::Px(20.0));
+        assert!(same_image(&a, &b));
+    }
+
+    #[test]
+    fn has_tab_finds_tabs_in_any_run() {
+        assert!(has_tab(&[vec![Run::plain("a"), Run::plain("\tb")]]));
+        assert!(!has_tab(&[vec![Run::plain("a"), Run::plain("b")]]));
+        assert!(!has_tab(&[]));
+    }
+
+    #[test]
+    fn split_keeps_style_across_a_tab() {
+        let cells = split_cells(&[Run {
+            text: "a\tb".to_owned(),
+            bold: true,
+            ..Default::default()
+        }]);
+        assert_eq!(cells.len(), 2);
+        assert_eq!(cells[0][0].text, "a");
+        assert_eq!(cells[1][0].text, "b");
+        assert!(cells.iter().all(|cell| cell[0].bold));
+    }
+
+    #[test]
+    fn empty_lines_and_leading_or_trailing_tabs_keep_their_cells() {
+        let rows = vec![
+            vec![Run::plain("\ta")],
+            vec![Run::plain("a\t")],
+            vec![],
+            vec![Run::plain("a\tb\tc")],
+        ];
+        let (cells, _) = cell_texts(&rows, 400.0, 200.0, SizeSpec::Px(20.0), 2, false);
+        assert_eq!(cells[0], vec!["", "a"]);
+        assert_eq!(cells[1], vec!["a", ""]);
+        assert_eq!(cells[2], vec![""]);
+        assert_eq!(cells[3], vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn a_line_without_tabs_is_one_cell() {
+        let rows = vec![
+            vec![Run::plain("a much wider first cell")],
+            vec![Run::plain("x\tY")],
+        ];
+        let (cells, _) = cell_texts(&rows, 400.0, 100.0, SizeSpec::Px(20.0), 2, false);
+        assert_eq!(cells[0], vec!["a much wider first cell"]);
+        assert_eq!(cells[1], vec!["x", "Y"]);
+    }
+
+    #[test]
+    fn second_column_starts_at_the_same_x_for_every_row() {
+        let short = vec![vec![Run::plain("i\t"), red("X")]];
+        let long = vec![vec![Run::plain("wide first cell\t"), red("X")]];
+        let both = vec![
+            vec![Run::plain("wide first cell\t"), red("X")],
+            vec![Run::plain("i\t"), red("X")],
+        ];
+        let (only_short, _) =
+            draw_grid(&short, 500, 100, Align::Left, SizeSpec::Px(20.0), 2, false);
+        let (only_long, _) = draw_grid(&long, 500, 100, Align::Left, SizeSpec::Px(20.0), 2, false);
+        let (combined, _) = draw_grid(&both, 500, 100, Align::Left, SizeSpec::Px(20.0), 2, false);
+        assert!(red_x(&only_long) > red_x(&only_short));
+        assert!((red_x(&combined) - red_x(&only_long)).abs() <= 1);
+    }
+
+    #[test]
+    fn a_tabless_line_widens_column_one() {
+        let tabbed = vec![vec![Run::plain("i\t"), red("X")]];
+        let titled = vec![
+            vec![Run::plain("a wide title")],
+            vec![Run::plain("i\t"), red("X")],
+        ];
+        let (without, _) = draw_grid(&tabbed, 500, 100, Align::Left, SizeSpec::Px(20.0), 2, false);
+        let (with, _) = draw_grid(&titled, 500, 100, Align::Left, SizeSpec::Px(20.0), 2, false);
+        assert!(red_x(&with) > red_x(&without));
+    }
+
+    #[test]
+    fn gap_spaces_move_the_second_column() {
+        let fonts = Fonts::embedded();
+        let advance = space_advance(20.0, false, fonts);
+        let rows = || vec![vec![Run::plain("ii\t"), red("X")]];
+        let (none, _) = draw_grid(&rows(), 500, 60, Align::Left, SizeSpec::Px(20.0), 0, false);
+        let (two, _) = draw_grid(&rows(), 500, 60, Align::Left, SizeSpec::Px(20.0), 2, false);
+        let (sixteen, _) = draw_grid(&rows(), 500, 60, Align::Left, SizeSpec::Px(20.0), 16, false);
+        let moved_two = (red_x(&two) - red_x(&none)) as f32;
+        let moved_sixteen = (red_x(&sixteen) - red_x(&none)) as f32;
+        assert!((moved_two - 2.0 * advance).abs() <= 1.5, "{moved_two}");
+        assert!(
+            (moved_sixteen - 16.0 * advance).abs() <= 1.5,
+            "{moved_sixteen}"
+        );
+    }
+
+    #[test]
+    fn mono_gap_differs_from_the_proportional_face() {
+        let fonts = Fonts::embedded();
+        let rows = || vec![vec![Run::plain("ii\t"), red("X")]];
+        let (sans, _) = draw_grid(&rows(), 500, 60, Align::Left, SizeSpec::Px(20.0), 4, false);
+        let (mono, _) = draw_grid(&rows(), 500, 60, Align::Left, SizeSpec::Px(20.0), 4, true);
+        let expected = 4.0 * (space_advance(20.0, true, fonts) - space_advance(20.0, false, fonts));
+        let actual = (red_x(&mono) - red_x(&sans)) as f32;
+        assert!((actual - expected).abs() <= 1.5, "{actual} vs {expected}");
+    }
+
+    #[test]
+    fn alignment_moves_the_grid_as_a_block() {
+        let rows = vec![vec![Run::plain("aa\t"), red("X")]];
+        let (left, _) = draw_grid(&rows, 400, 60, Align::Left, SizeSpec::Px(20.0), 2, false);
+        let (center, _) = draw_grid(&rows, 400, 60, Align::Center, SizeSpec::Px(20.0), 2, false);
+        let (right, _) = draw_grid(&rows, 400, 60, Align::Right, SizeSpec::Px(20.0), 2, false);
+        assert!(red_x(&left) < red_x(&center));
+        assert!(red_x(&center) < red_x(&right));
+        assert!(red_bounds(&right).unwrap().2 < 400);
+    }
+
+    #[test]
+    fn auto_size_shrinks_with_more_columns_and_stays_in_bounds() {
+        let mut previous = f32::MAX;
+        for columns in 1..=8 {
+            let text = vec!["abc"; columns].join("\t");
+            let rows = vec![vec![Run::plain(text)]];
+            let (canvas, result) =
+                draw_grid(&rows, 400, 128, Align::Left, SizeSpec::Auto, 2, false);
+            assert!(
+                result.font_size <= previous + 0.01,
+                "{columns} columns: {} > {previous}",
+                result.font_size
+            );
+            previous = result.font_size;
+            let (_, _, max_x, _) = bounds(&canvas);
+            assert!(max_x < 400, "{columns} columns overflow: {max_x}");
+        }
+        assert!(previous < 64.0);
+    }
+
+    #[test]
+    fn a_slightly_too_wide_last_column_is_ellipsized_not_dropped() {
+        let size = 20.0;
+        let fonts = Fonts::embedded();
+        let first = measure_width(&[Run::plain("aaaa")], size, fonts);
+        let second = measure_width(&[Run::plain("bbbbbbbbbbbb")], size, fonts);
+        let gap = 2.0 * space_advance(size, false, fonts);
+        let ellipsis = measure_width(&[Run::plain("…")], size, fonts);
+        let inner = first + gap + ellipsis + 6.0;
+        assert!(ellipsis + 6.0 < second);
+        let rows = vec![vec![Run::plain("aaaa\tbbbbbbbbbbbb")]];
+        let (cells, truncated) = cell_texts(&rows, inner + 4.0, 60.0, SizeSpec::Px(size), 2, false);
+        assert!(truncated);
+        assert_eq!(cells.len(), 1);
+        assert_eq!(cells[0].len(), 2);
+        assert_eq!(cells[0][0], "aaaa");
+        assert!(cells[0][1].ends_with('…'), "{:?}", cells[0][1]);
+        assert!(cells[0][1].len() < "bbbbbbbbbbbb".len());
+    }
+
+    #[test]
+    fn a_too_wide_first_column_drops_the_others_and_ellipsizes() {
+        let rows = vec![vec![Run::plain("aaaaaaaaaaaaaaaa\tb")]];
+        let (cells, truncated) = cell_texts(&rows, 34.0, 60.0, SizeSpec::Px(20.0), 2, false);
+        assert!(truncated);
+        assert_eq!(cells.len(), 1);
+        assert_eq!(cells[0].len(), 1);
+        assert!(cells[0][0].ends_with('…'), "{:?}", cells[0][0]);
+    }
+
+    #[test]
+    fn a_dropped_column_ellipsizes_even_an_empty_last_kept_cell() {
+        let size = 20.0;
+        let fonts = Fonts::embedded();
+        let first = measure_width(&[Run::plain("dd")], size, fonts);
+        let second = measure_width(&[Run::plain("bb")], size, fonts);
+        let gap = 2.0 * space_advance(size, false, fonts);
+        let ellipsis = measure_width(&[Run::plain("…")], size, fonts);
+        let avail = (ellipsis - 2.0).max(0.5);
+        let inner = first + second + 2.0 * gap + avail;
+        let rows = vec![vec![Run::plain("dd\tbb\tcc")], vec![Run::plain("dd\t\tcc")]];
+        let (cells, truncated) =
+            cell_texts(&rows, inner + 4.0, 100.0, SizeSpec::Px(size), 2, false);
+        assert!(truncated);
+        assert_eq!(cells.len(), 2);
+        assert_eq!(cells[0].len(), 2, "{cells:?}");
+        assert_eq!(cells[1][1], "…", "{cells:?}");
+        assert!(cells[0][1].ends_with('…'), "{cells:?}");
+    }
+
+    #[test]
+    fn rows_that_do_not_fit_vertically_are_dropped_from_the_bottom() {
+        let rows: Vec<Vec<Run>> = (0..10).map(|_| vec![Run::plain("x")]).collect();
+        let (cells, truncated) = cell_texts(&rows, 100.0, 30.0, SizeSpec::Px(20.0), 2, false);
+        assert!(truncated);
+        assert!(cells.len() < 10, "{}", cells.len());
+        assert!(!cells.is_empty());
+    }
+
+    #[test]
+    fn a_grid_of_one_row_and_column_still_draws() {
+        let rows = vec![vec![Run::plain("hello")]];
+        let (canvas, result) = draw_grid(&rows, 200, 60, Align::Left, SizeSpec::Px(20.0), 2, false);
+        assert!(!result.truncated);
+        assert!(bounds(&canvas).2 > 0);
     }
 }

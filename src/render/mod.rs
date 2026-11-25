@@ -373,6 +373,7 @@ impl Renderer {
             bar,
             bar_color: self.config.bar_color,
             bar_bg: self.config.bar_bg,
+            grid: None,
             options: &options,
         };
         draw_text(canvas, rect, &request, &self.fonts).truncated
