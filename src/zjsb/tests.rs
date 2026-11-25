@@ -838,7 +838,7 @@ fn options_come_from_the_config() {
 #[test]
 fn the_examples_apply_their_keys_to_the_defaults() {
     let all = examples::load().unwrap();
-    assert_eq!(all.len(), 27);
+    assert_eq!(all.len(), 29);
     let by = |name: &str| all.iter().find(|e| e.name == name).cloned().unwrap();
     let e = by("default-mixed");
     assert!(e.overrides.is_empty());
@@ -860,6 +860,21 @@ fn the_examples_apply_their_keys_to_the_defaults() {
     let want =
         std::fs::read_to_string(examples::dir().join("expected/compact-custom.txt")).unwrap();
     assert_eq!(e.render().unwrap().as_deref(), Some(want.as_str()));
+    // The lines examples select the layout and match their expected strings.
+    for name in ["lines-agents", "lines-busy"] {
+        let e = by(name);
+        let c = e.config().unwrap();
+        assert_eq!(c.zjsb_layout, "lines");
+        assert_eq!(Options::from_config(&c).layout, Layout::Lines);
+        let want =
+            std::fs::read_to_string(examples::dir().join("expected").join(format!("{name}.txt")))
+                .unwrap();
+        assert_eq!(
+            e.render().unwrap().as_deref(),
+            Some(want.as_str()),
+            "{name}"
+        );
+    }
     let ex = |overrides: Vec<(&str, toml::Value)>| examples::Example {
         name: "x".into(),
         scenario: "mixed".into(),
@@ -937,4 +952,303 @@ fn unsynced_documents_keep_the_deck() {
     let mut w = crate::writer::Writer::new(&Config::default());
     w.stage(&doc, 0);
     assert!(w.deadline().is_none());
+}
+
+/// A `lines` layout with the given templates; the entry and more templates
+/// keep the fields those layouts use.
+fn lines_opts(counts: &str, entry: &str, more: &str) -> Options {
+    Options {
+        layout: Layout::Lines,
+        counts: Template::parse(counts, COUNT_FIELDS).unwrap(),
+        entry: Template::parse(entry, &with_counts(ENTRY_FIELDS)).unwrap(),
+        more: Template::parse(more, &with_counts(MORE_FIELDS)).unwrap(),
+        ..Options::default()
+    }
+}
+
+/// The `lines` output split into rows and cells.
+fn rows(text: &str) -> Vec<Vec<&str>> {
+    text.split("\\n")
+        .map(|row| row.split("\\t").collect())
+        .collect()
+}
+
+/// A document with `n` working entries, panes 1 to `n`.
+fn many(n: usize) -> Document {
+    doc((1..=n).map(|p| r("working", p as u32, 0)).collect())
+}
+
+#[test]
+fn the_lines_layout_follows_the_row_matrix() {
+    let entry = "e1\\ne2\\ne3";
+    let more = "m1\\nm2\\nm3";
+    let check = |counts: &str, entries: usize, want: &[&[&str]]| {
+        let got = text(&many(entries), &lines_opts(counts, entry, more)).unwrap();
+        assert_eq!(rows(&got), want, "counts {counts:?}, {entries} entries");
+    };
+    let four = [
+        &["g1", "e1", "e2", "e3"][..],
+        &["g2", "e1", "e2", "e3"],
+        &["g3", "e1", "e2", "e3"],
+        &["g4", "e1", "e2", "e3"],
+    ];
+    // Counts 4, entries 0: the gutter stays and row 1 is `All clear`.
+    check(
+        "g1\\ng2\\ng3\\ng4",
+        0,
+        &[
+            &["g1", "[c=#66cc88][b]All clear[/b][/c]"],
+            &["g2", ""],
+            &["g3", ""],
+            &["g4", ""],
+        ],
+    );
+    // Counts 4, a few entries, then all four.
+    check(
+        "g1\\ng2\\ng3\\ng4",
+        1,
+        &[
+            &["g1", "e1", "e2", "e3"],
+            &["g2", ""],
+            &["g3", ""],
+            &["g4", ""],
+        ],
+    );
+    check("g1\\ng2\\ng3\\ng4", 4, &four);
+    // Five entries fill five rows; the fifth has no gutter line.
+    let mut five: Vec<&[&str]> = four.to_vec();
+    five.push(&["", "e1", "e2", "e3"]);
+    check("g1\\ng2\\ng3\\ng4", 5, &five);
+    // Six entries: four rows plus the more row.
+    let mut more_row = four.to_vec();
+    more_row.push(&["", "m1", "m2", "m3"]);
+    check("g1\\ng2\\ng3\\ng4", 6, &more_row);
+    // A one-line gutter leaves the entry rows without a gutter cell.
+    check(
+        "g1",
+        4,
+        &[
+            &["g1", "e1", "e2", "e3"],
+            &["", "e1", "e2", "e3"],
+            &["", "e1", "e2", "e3"],
+            &["", "e1", "e2", "e3"],
+        ],
+    );
+    // A six-line gutter shows its first five lines.
+    check(
+        "g1\\ng2\\ng3\\ng4\\ng5\\ng6",
+        4,
+        &[
+            &["g1", "e1", "e2", "e3"],
+            &["g2", "e1", "e2", "e3"],
+            &["g3", "e1", "e2", "e3"],
+            &["g4", "e1", "e2", "e3"],
+            &["g5", ""],
+        ],
+    );
+    // No counts template, no gutter column.
+    check("", 0, &[&["[c=#66cc88][b]All clear[/b][/c]"]]);
+    check("", 5, &[&["e1", "e2", "e3"][..]; 5]);
+    check(
+        "",
+        6,
+        &[
+            &["e1", "e2", "e3"],
+            &["e1", "e2", "e3"],
+            &["e1", "e2", "e3"],
+            &["e1", "e2", "e3"],
+            &["m1", "m2", "m3"],
+        ],
+    );
+    // The first five entries are all shown without a more row.
+    check("", 5, &[&["e1", "e2", "e3"][..]; 5]);
+}
+
+#[test]
+fn an_entry_template_with_n_lines_gives_n_entry_columns() {
+    for n in [1, 2, 3, 5] {
+        let entry: Vec<String> = (1..=n).map(|i| format!("c{i}")).collect();
+        let o = lines_opts("g1", &entry.join("\\n"), "m1");
+        let got = text(&many(2), &o).unwrap();
+        let mut first = vec!["g1"];
+        first.extend(entry.iter().map(String::as_str));
+        let mut second = vec![""];
+        second.extend(entry.iter().map(String::as_str));
+        assert_eq!(rows(&got), [first, second], "{n} entry lines");
+    }
+    // A more template with fewer lines than the entry template is ragged.
+    let got = text(&many(6), &lines_opts("g1", "e1\\ne2\\ne3", "m1")).unwrap();
+    assert_eq!(rows(&got).last().unwrap(), &["", "m1"]);
+}
+
+#[test]
+fn all_empty_placeholder_lines_keep_their_cell() {
+    let o = lines_opts("c1\\nc2", "{msg}\\nfixed\\n{progress_pct}", "");
+    let got = text(&doc(vec![r("blocked", 1, 0)]), &o).unwrap();
+    assert_eq!(
+        rows(&got),
+        [["c1", "", "fixed", ""].as_slice(), ["c2", ""].as_slice(),],
+        "the empty entry cells keep their position"
+    );
+    // In `segments` those lines are still dropped.
+    let mut o = o;
+    o.layout = Layout::Segments;
+    let got = text(&doc(vec![r("blocked", 1, 0)]), &o).unwrap();
+    assert_eq!(got, "c1\\nc2|fixed");
+}
+
+#[test]
+fn five_rows_are_not_lost_to_the_segment_budget() {
+    let entry = (1..=3).map(|_| "{msg:100}").collect::<Vec<_>>().join("\\n");
+    let o = lines_opts("", &entry, "");
+    let d = doc((1..=5)
+        .map(|p| patch(r("working", p, 0), json!({"msg": "m".repeat(100)})))
+        .collect());
+    let got = text(&d, &o).unwrap();
+    assert!(
+        got.chars().count() > MAX_SEGMENT,
+        "the whole output is over the per-segment budget"
+    );
+    let got_rows = rows(&got);
+    assert_eq!(got_rows.len(), 5, "all five rows are kept: {got}");
+    for row in got_rows {
+        assert_eq!(row.len(), 3, "a full row stays whole: {row:?}");
+    }
+}
+
+#[test]
+fn a_long_row_drops_trailing_cells_only() {
+    let entry = (1..=5).map(|_| "{msg:100}").collect::<Vec<_>>().join("\\n");
+    let o = lines_opts("", &entry, "");
+    let d = doc(vec![patch(
+        r("working", 1, 0),
+        json!({"msg": "m".repeat(100)}),
+    )]);
+    let got = text(&d, &o).unwrap();
+    let got_rows = rows(&got);
+    assert_eq!(got_rows.len(), 1, "the row is never dropped");
+    assert_eq!(
+        got_rows[0].len(),
+        3,
+        "100 + 1 + 100 + 1 + 100 fits; the fourth cell does not: {:?}",
+        got_rows[0]
+    );
+    assert_eq!(
+        got_rows[0][0],
+        "m".repeat(100),
+        "the first cell always stays"
+    );
+    // A first cell over the budget stays whole.
+    let o = lines_opts("", "{msg:500}", "");
+    let d = doc(vec![patch(
+        r("working", 1, 0),
+        json!({"msg": "m".repeat(500)}),
+    )]);
+    let got = text(&d, &o).unwrap();
+    let got_rows = rows(&got);
+    assert_eq!(got_rows.len(), 1);
+    assert_eq!(got_rows[0], ["m".repeat(500)]);
+}
+
+#[test]
+fn lines_idle_keeps_the_gutter_and_all_clear() {
+    let o = lines_opts("g1\\ng2\\ng3\\ng4", "e1\\ne2\\ne3", "");
+    let got = text(&doc(vec![]), &o).unwrap();
+    assert_eq!(
+        rows(&got),
+        [
+            ["g1", "[c=#66cc88][b]All clear[/b][/c]"].as_slice(),
+            ["g2", ""].as_slice(),
+            ["g3", ""].as_slice(),
+            ["g4", ""].as_slice(),
+        ]
+    );
+    for text in ["no failures", "nothing running", "waiting for agents"] {
+        assert!(!got.contains(text), "{text} is not shown in lines");
+    }
+    // Without a counts template the output is the All clear line alone.
+    let o = lines_opts("", "e1\\ne2\\ne3", "");
+    assert_eq!(
+        text(&doc(vec![]), &o).as_deref(),
+        Some("[c=#66cc88][b]All clear[/b][/c]")
+    );
+    // An idle template replaces the whole output, cut to five rows.
+    let o = Options {
+        layout: Layout::Lines,
+        idle: Template::parse("i1\\ni2\\ni3\\ni4\\ni5\\ni6\\ni7", COUNT_FIELDS).unwrap(),
+        ..Options::default()
+    };
+    assert_eq!(
+        text(&doc(vec![]), &o).as_deref(),
+        Some("i1\\ni2\\ni3\\ni4\\ni5")
+    );
+    assert_eq!(text(&many(2), &o).unwrap().split("\\n").count(), 4);
+    // `blank_when_idle` still clears the slot.
+    let o = Options {
+        layout: Layout::Lines,
+        blank_when_idle: true,
+        ..Options::default()
+    };
+    assert_eq!(text(&doc(vec![]), &o), None);
+}
+
+#[test]
+fn lines_values_cannot_add_cells_or_rows() {
+    let o = lines_opts("", "{app}\t{msg}", "");
+    let d = doc(vec![patch(
+        r("working", 1, 0),
+        json!({"app": "a\tb|c", "msg": "e\nf"}),
+    )]);
+    let got = text(&d, &o).unwrap();
+    assert_eq!(rows(&got).len(), 1);
+    assert_eq!(rows(&got)[0].len(), 1, "one template line is one cell");
+    assert_eq!(rows(&got)[0], ["a b c e f"]);
+    assert!(
+        !got.contains('|') && !got.contains('\t') && !got.contains('\n'),
+        "a value adds no segment, cell or row: {got:?}"
+    );
+    // A `\t` in a value is escaped, so the writer's unescape leaves text.
+    let d = doc(vec![patch(
+        r("working", 1, 0),
+        json!({"app": "x\\ty", "msg": "m"}),
+    )]);
+    assert_eq!(text(&d, &o).unwrap(), "x\\\\ty m");
+    // A literal `\t` in template text is a space too.
+    let o = lines_opts("", "{app}\\t{msg}", "");
+    let d = doc(vec![patch(
+        r("working", 1, 0),
+        json!({"app": "a", "msg": "b"}),
+    )]);
+    assert_eq!(rows(&text(&d, &o).unwrap())[0], ["a b"]);
+    // Markup is parsed per row, so a tag may span the cells.
+    let o = lines_opts("", "[b]{app}\\n{msg}", "");
+    let d = doc(vec![patch(
+        r("working", 1, 0),
+        json!({"app": "a", "msg": "b"}),
+    )]);
+    assert_eq!(rows(&text(&d, &o).unwrap())[0], ["[b]a", "b"]);
+}
+
+#[test]
+fn the_lines_layout_is_selected_by_the_config() {
+    assert_eq!(Options::default().layout, Layout::Segments);
+    let c = Config {
+        zjsb_layout: "lines".into(),
+        ..Config::default()
+    };
+    assert_eq!(Options::from_config(&c).layout, Layout::Lines);
+    // Compact mode ignores the layout.
+    let c = Config {
+        zjsb_mode: "compact".into(),
+        zjsb_slot: "dial1".into(),
+        zjsb_layout: "lines".into(),
+        ..Config::default()
+    };
+    let o = Options::from_config(&c);
+    assert_eq!((o.mode, o.layout), (Mode::Compact, Layout::Lines));
+    assert_eq!(
+        text(&doc(vec![r("blocked", 1, 0)]), &o).as_deref(),
+        Some("[c=orange]● 1[/c]\\napp1"),
+        "compact output does not change"
+    );
 }

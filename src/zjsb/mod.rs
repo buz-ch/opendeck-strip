@@ -68,6 +68,10 @@ pub const MORE_FIELDS: &[&str] = &["hidden", "state_label", "color", "marker"];
 const SHOWN: usize = 3;
 /// A segment must stay small: lines are dropped past this many characters.
 const MAX_SEGMENT: usize = 400;
+/// Rows the `lines` layout shows at most; a legibility limit, not a config key.
+const MAX_ROWS: usize = 5;
+/// The first entry cell of the idle row in the `lines` layout.
+const ALL_CLEAR: &str = "[c=#66cc88][b]All clear[/b][/c]";
 
 /// Deck priority, lowest first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -225,6 +229,15 @@ pub enum Mode {
     Compact,
 }
 
+/// How the strip output is written: `segments` (the default) or tab-separated
+/// `lines`; see `docs/lines-layout-design.md`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Layout {
+    #[default]
+    Segments,
+    Lines,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Options {
     pub entry: Template,
@@ -234,6 +247,7 @@ pub struct Options {
     /// Shown instead of the output when nothing is active.
     pub idle: Template,
     pub mode: Mode,
+    pub layout: Layout,
     /// Compact only: the slot the text goes to.
     pub slot: Option<String>,
     /// Clear the deck when nothing is active and `idle` is empty.
@@ -257,6 +271,7 @@ impl Default for Options {
             compact: must(DEFAULT_COMPACT, &with_counts(ENTRY_FIELDS)),
             idle: Template::default(),
             mode: Mode::Strip,
+            layout: Layout::Segments,
             slot: None,
             blank_when_idle: false,
         }
@@ -285,6 +300,11 @@ impl Options {
                 Mode::Compact
             } else {
                 Mode::Strip
+            },
+            layout: if c.zjsb_layout == "lines" {
+                Layout::Lines
+            } else {
+                Layout::Segments
             },
             slot: (c.zjsb_mode == "compact").then(|| c.zjsb_slot.clone()),
             blank_when_idle: c.zjsb_blank_when_idle,
@@ -446,6 +466,20 @@ fn cap(s: String) -> String {
     out
 }
 
+/// The context of the `+N more` row: the hidden entries and the counts.
+fn more_ctx(hidden: &[Entry], counts: &Counts) -> Ctx {
+    let top = hidden.iter().map(|e| e.state).max().unwrap_or(State::Idle);
+    let mut m = counts_ctx(counts);
+    m.insert("hidden", hidden.len().to_string());
+    m.insert(
+        "state_label",
+        state_label(top, None).replace("needs you", "need you"),
+    );
+    m.insert("color", colour(top).into());
+    m.insert("marker", marker(top).into());
+    m
+}
+
 /// The strip string: counts, up to three entries, or two plus `+N more`.
 fn strip(entries: &[Entry], counts: &Counts, o: &Options, now_ms: u64) -> String {
     if entries.is_empty() && !o.idle.is_empty() {
@@ -460,19 +494,92 @@ fn strip(entries: &[Entry], counts: &Counts, o: &Options, now_ms: u64) -> String
         segs.extend(entries.iter().map(show));
     } else {
         segs.extend(entries[..SHOWN - 1].iter().map(show));
-        let hidden = &entries[SHOWN - 1..];
-        let top = hidden.iter().map(|e| e.state).max().unwrap_or(State::Idle);
-        let mut m = counts_ctx(counts);
-        m.insert("hidden", hidden.len().to_string());
-        m.insert(
-            "state_label",
-            state_label(top, None).replace("needs you", "need you"),
-        );
-        m.insert("color", colour(top).into());
-        m.insert("marker", marker(top).into());
+        let m = more_ctx(&entries[SHOWN - 1..], counts);
         segs.push(cap(o.more.render(&m)));
     }
     segs.join("|")
+}
+
+/// One row of the `lines` layout: cells joined by a literal `\t`. Trailing
+/// cells past the row budget are dropped whole; the first cell always stays.
+fn join_row(cells: &[String]) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    let mut chars = 0;
+    for cell in cells {
+        let sep = usize::from(!kept.is_empty());
+        let len = cell.chars().count();
+        if !kept.is_empty() && chars + sep + len > MAX_SEGMENT {
+            break;
+        }
+        chars += sep + len;
+        kept.push(cell);
+    }
+    kept.join("\\t")
+}
+
+/// The counter gutter: one cell per counts line, at most [`MAX_ROWS`]. Empty
+/// when the template has no lines, so there is no gutter column.
+fn gutter(counts: &Counts, o: &Options) -> Vec<String> {
+    if o.counts.is_empty() {
+        return Vec::new();
+    }
+    o.counts
+        .render_cells(&counts_ctx(counts))
+        .into_iter()
+        .take(MAX_ROWS)
+        .collect()
+}
+
+/// The entry side of the `lines` layout: one row of cells per entry, or the
+/// `All clear` row when nothing is active, or four rows plus `+N more`.
+fn entry_rows(entries: &[Entry], counts: &Counts, o: &Options, now_ms: u64) -> Vec<Vec<String>> {
+    let cells = |e: &Entry| o.entry.render_cells(&entry_ctx(e, counts, now_ms));
+    if entries.is_empty() {
+        return vec![vec![ALL_CLEAR.to_owned()]];
+    }
+    if entries.len() <= MAX_ROWS {
+        return entries.iter().map(cells).collect();
+    }
+    let mut rows: Vec<Vec<String>> = entries[..MAX_ROWS - 1].iter().map(cells).collect();
+    rows.push(
+        o.more
+            .render_cells(&more_ctx(&entries[MAX_ROWS - 1..], counts)),
+    );
+    rows
+}
+
+/// The `lines` layout: a grid of `[gutter cell] + entry cells` rows, joined by
+/// a literal `\n`.
+fn lines(entries: &[Entry], counts: &Counts, o: &Options, now_ms: u64) -> String {
+    if entries.is_empty() && !o.idle.is_empty() {
+        // As in `segments`, a line whose placeholders are all empty is not a row.
+        return split_lines(&o.idle.render(&counts_ctx(counts)))
+            .into_iter()
+            .take(MAX_ROWS)
+            .collect::<Vec<_>>()
+            .join("\\n");
+    }
+    let gutter_cells = gutter(counts, o);
+    let entry_rows = entry_rows(entries, counts, o, now_ms);
+    let has_gutter = !gutter_cells.is_empty();
+    let rows = MAX_ROWS.min(gutter_cells.len().max(entry_rows.len()));
+    (0..rows)
+        .map(|i| {
+            let mut cells = Vec::new();
+            if has_gutter {
+                cells.push(gutter_cells.get(i).cloned().unwrap_or_default());
+            }
+            match entry_rows.get(i) {
+                Some(entry) => cells.extend(entry.iter().cloned()),
+                // A row without an entry keeps the gutter column and one blank
+                // cell, so the entry columns stay in place.
+                None if has_gutter => cells.push(String::new()),
+                None => {}
+            }
+            join_row(&cells)
+        })
+        .collect::<Vec<_>>()
+        .join("\\n")
 }
 
 /// The value of one compact slot: the first entry, else the idle template.
@@ -495,9 +602,10 @@ pub fn render(doc: &Document, o: &Options, now_ms: u64) -> Option<String> {
         return None;
     }
     let c = counts(&entries);
-    Some(match o.mode {
-        Mode::Strip => strip(&entries, &c, o, now_ms),
-        Mode::Compact => compact(&entries, &c, o, now_ms),
+    Some(match (o.mode, o.layout) {
+        (Mode::Strip, Layout::Lines) => lines(&entries, &c, o, now_ms),
+        (Mode::Strip, Layout::Segments) => strip(&entries, &c, o, now_ms),
+        (Mode::Compact, _) => compact(&entries, &c, o, now_ms),
     })
 }
 

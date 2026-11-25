@@ -756,6 +756,45 @@ fn apply_applies_a_full_then_incremental_frame() {
 }
 
 #[test]
+fn apply_zellij_lines_writes_tabs_and_newlines() {
+    let env = Env::new();
+    let doc: Value = serde_json::from_str(include_str!("zjsb/scenarios/one-blocked.json")).unwrap();
+    let line = serde_json::json!({"v": 1, "type": "state", "seq": 1, "doc": doc}).to_string();
+    let mut child = env
+        .command(["apply-zellij"])
+        .env("OPENDECK_STRIP_ZJSB_LAYOUT", "lines")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn apply");
+    {
+        use std::io::Write;
+        let stdin = child.stdin.as_mut().expect("stdin is piped");
+        writeln!(stdin, "{line}").unwrap();
+    }
+    drop(child.stdin.take());
+    let output = child.wait_with_output().expect("wait for apply");
+    assert!(
+        output.status.success(),
+        "apply failed: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let status = env.status_json();
+    assert_eq!(status["strip_mode"], "raw");
+    let strip = status["strip"].as_str().expect("strip text");
+    assert!(strip.contains('\t') && strip.contains('\n'), "{strip:?}");
+    assert!(
+        !strip.contains('|'),
+        "lines never uses a segment: {strip:?}"
+    );
+    assert_eq!(
+        strip,
+        "[c=orange]● 1[/c]\t[b]claude[/b]\t[c=orange]needs approval[/c]\twrite src/auth.rs\n\
+         [c=grey]✗ 0[/c]\t\n[c=grey]✓ 0[/c]\t\n[c=grey]» 0[/c]\t"
+    );
+}
+
+#[test]
 fn apply_clear_names_follow_clear_semantics() {
     let env = Env::new();
     fs::write(

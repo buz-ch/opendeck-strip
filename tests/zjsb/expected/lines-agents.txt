@@ -1,0 +1,1 @@
+[c=orange]● 1[/c]\t[b]claude[/b]\t[c=orange]needs approval[/c]\trun cargo test\n[c=grey]✗ 0[/c]\t[b]opencode[/b]\t[c=green]done[/c]\tPR #42 ready\n[c=green]✓ 1[/c]\t[b]codex[/b]\t[c=#55ccff]working[/c]\t60%\n[c=#55ccff]» 1[/c]\t

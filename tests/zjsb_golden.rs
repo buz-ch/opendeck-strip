@@ -11,9 +11,9 @@ fn expected_dir() -> PathBuf {
 }
 
 #[test]
-fn the_manifest_lists_the_27_examples_once_each() {
+fn the_manifest_lists_the_29_examples_once_each() {
     let all = examples::load().expect("examples.toml");
-    assert_eq!(all.len(), 27);
+    assert_eq!(all.len(), 29);
     let mut names: Vec<_> = all.iter().map(|e| e.name.as_str()).collect();
     names.sort_unstable();
     names.dedup();

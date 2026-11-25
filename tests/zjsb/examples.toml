@@ -1,4 +1,4 @@
-# The 27 preview examples: which document scenario and which renderer keys.
+# The 29 preview examples: which document scenario and which renderer keys.
 # Used by tests/zjsb_golden.rs and preview.sh.
 #
 # `scenario` names a document in scenarios/<name>.json. Every other key is a
@@ -124,6 +124,17 @@ zjsb_entry_template = "[b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=g
 name = "more-segment"
 scenario = "busy"
 zjsb_more_template = "[s=1.6][c={color}]{marker}[/c][/s] [b]+{hidden}[/b]\n[c={color}]{state_label}[/c]"
+
+# ---- The lines layout ----
+[[example]]
+name = "lines-agents"
+scenario = "agents"
+zjsb_layout = "lines"
+
+[[example]]
+name = "lines-busy"
+scenario = "busy"
+zjsb_layout = "lines"
 
 # ---- Custom templates: one slot (compact) ----
 [[example]]

@@ -115,6 +115,7 @@ fn apply(c: &mut Config, key: &str, v: &toml::Value) -> Result<(), String> {
     };
     match key {
         "zjsb_mode" => c.zjsb_mode = text()?,
+        "zjsb_layout" => c.zjsb_layout = text()?,
         "zjsb_slot" => c.zjsb_slot = text()?,
         "zjsb_entry_template" => c.zjsb_entry_template = text()?,
         "zjsb_counts_template" => c.zjsb_counts_template = text()?,
