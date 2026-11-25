@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::render::layout::{Align, VAlign};
 use crate::status::StripMode;
+use crate::zjsb::MAX_ROWS;
 use crate::zjsb::template::Template;
 
 #[derive(Clone, Debug)]
@@ -247,9 +248,9 @@ impl Config {
             Template::parse(text, fields).ok().map(|t| t.line_count())
         };
         let counts = count(&self.zjsb_counts_template, crate::zjsb::COUNT_FIELDS);
-        if let Some(counts) = counts.filter(|n| *n > LINES_ROWS) {
+        if let Some(counts) = counts.filter(|n| *n > MAX_ROWS) {
             self.warnings.push(format!(
-                "zjsb_layout = \"lines\" with a zjsb_counts_template of {counts} lines; the first {LINES_ROWS} are used"
+                "zjsb_layout = \"lines\" with a zjsb_counts_template of {counts} lines; the first {MAX_ROWS} are used"
             ));
         }
         if let (Some(entry), Some(more)) = (
@@ -263,15 +264,13 @@ impl Config {
         }
         if self.min_font_size > LINES_MAX_MIN_FONT_SIZE {
             self.warnings.push(format!(
-                "zjsb_layout = \"lines\" with min_font_size {}; five rows may not fit",
+                "zjsb_layout = \"lines\" with min_font_size {}; five rows may not fit and the +N more row is lost first",
                 trim_num(self.min_font_size.to_string())
             ));
         }
     }
 }
 
-/// Rows the `lines` layout shows (five is the zjsb side's fixed limit).
-const LINES_ROWS: usize = 5;
 /// Above this the five rows of the `lines` layout may not fit the strip.
 const LINES_MAX_MIN_FONT_SIZE: f32 = 16.0;
 

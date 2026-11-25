@@ -381,7 +381,7 @@ struct CellLayout {
     ascent: f32,
     descent: f32,
     max_size: f32,
-    /// Plain text of the cell, for truncation tests.
+    /// Plain text of the cell, for the lost-content check and truncation tests.
     text: String,
 }
 

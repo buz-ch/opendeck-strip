@@ -795,6 +795,63 @@ fn apply_zellij_lines_writes_tabs_and_newlines() {
 }
 
 #[test]
+fn apply_zellij_lines_escapes_a_template_backslash() {
+    let env = Env::new();
+    fs::write(
+        env.path("config.toml"),
+        "zjsb_layout = \"lines\"\n\
+         zjsb_counts_template = \"\"\n\
+         zjsb_entry_template = '{app}\\n x\\{title}\\n{msg}'\n",
+    )
+    .unwrap();
+    let doc = serde_json::json!({
+        "version": 2,
+        "generated_ms": 1_800_000_000_000u64,
+        "attention_enabled": true,
+        "sessions": [{
+            "name": "work",
+            "is_current": true,
+            "panes": [{
+                "source": "program_status",
+                "tab": {"id": 0, "name": null},
+                "pane": {"id": 1, "title": "tango"},
+                "state": "working",
+                "app": "claude",
+                "msg": "hello",
+                "since_ms": 1_799_999_905_000u64,
+                "on_deck": true,
+            }],
+        }],
+    });
+    let line = serde_json::json!({"v": 1, "type": "state", "seq": 1, "doc": doc}).to_string();
+    let mut child = env
+        .command(["apply-zellij"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn apply");
+    {
+        use std::io::Write;
+        let stdin = child.stdin.as_mut().expect("stdin is piped");
+        writeln!(stdin, "{line}").unwrap();
+    }
+    drop(child.stdin.take());
+    let output = child.wait_with_output().expect("wait for apply");
+    assert!(
+        output.status.success(),
+        "apply failed: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let status = env.status_json();
+    let strip = status["strip"].as_str().expect("strip text");
+    assert_eq!(strip.split('\t').count(), 3, "three cells: {strip:?}");
+    assert_eq!(
+        strip, "claude\t x\\tango\thello",
+        "the value's `t` stays text after the template's escaped backslash"
+    );
+}
+
+#[test]
 fn apply_clear_names_follow_clear_semantics() {
     let env = Env::new();
     fs::write(

@@ -630,6 +630,17 @@ fn tabs_with_word_wrap_render_as_four_spaces() {
 }
 
 #[test]
+fn tabs_in_tiles_with_word_wrap_render_as_four_spaces() {
+    let mut renderer = renderer();
+    renderer.config.word_wrap = true;
+    let tabbed = SlotValue::from_text("ab\tcd\nef\tgh");
+    let spaced = SlotValue::from_text("ab    cd\nef    gh");
+    let with_tab = renderer.render_strip(&tabbed, StripMode::Tiles, 28, Detail::Full);
+    let with_spaces = renderer.render_strip(&spaced, StripMode::Tiles, 28, Detail::Full);
+    assert_eq!(with_tab.images, with_spaces.images);
+}
+
+#[test]
 fn a_column_starts_at_the_same_x_in_rows_with_different_first_cells() {
     let frame = raw_image(&renderer(), &SlotValue::from_text(GRID_TEXT));
     let (red_start, red_end) = x_span(&frame, is_red);

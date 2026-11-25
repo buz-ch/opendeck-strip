@@ -129,6 +129,8 @@ fn render_line(line: &[Part], ctx: &Ctx, tabs: Tabs) -> Option<String> {
 }
 
 /// A tab becomes one space; `\\t` is an escaped backslash and a `t` and stays.
+/// Any other backslash is escaped, so a following value cannot fuse with it
+/// into an escape that `cli::unescape` would expand.
 fn untab(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars();
@@ -137,11 +139,12 @@ fn untab(text: &str) -> String {
             '\t' => out.push(' '),
             '\\' => match chars.next() {
                 Some('t') => out.push(' '),
+                Some('\\') => out.push_str("\\\\"),
                 Some(other) => {
-                    out.push('\\');
+                    out.push_str("\\\\");
                     out.push(other);
                 }
-                None => out.push('\\'),
+                None => out.push_str("\\\\"),
             },
             c => out.push(c),
         }
@@ -311,5 +314,21 @@ mod tests {
         assert_eq!(cells, ["x y <x y>"], "a tab in a value is a space");
         let cells = t.render_cells(&ctx(&[("a", "x\\ty"), ("b", "x\\ty")]));
         assert_eq!(cells, ["x\\\\ty <x\\\\ty>"], "`\\t` in a value stays text");
+    }
+
+    #[test]
+    fn a_literal_ending_in_a_backslash_cannot_escape_the_value() {
+        let t = Template::parse("x\\{a}t", ALL).unwrap();
+        assert_eq!(
+            t.render_cells(&ctx(&[("a", "ango")])),
+            ["x\\\\angot"],
+            "the backslash is escaped, so the value cannot fuse into `\\t`"
+        );
+        let t = Template::parse("x\\{a}", ALL).unwrap();
+        assert_eq!(
+            t.render_cells(&ctx(&[("a", "n")])),
+            ["x\\\\n"],
+            "and cannot fuse into `\\n` either"
+        );
     }
 }

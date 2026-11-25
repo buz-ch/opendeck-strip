@@ -1,6 +1,6 @@
 # Design: entries on lines
 
-Status: proposal, not implemented.
+Status: implemented (`LineLayout`).
 
 Goal: show the deck entries as rows across the whole touch strip instead of
 the four 200 px segments, with the counts block as a left gutter. The renderer

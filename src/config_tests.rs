@@ -637,7 +637,9 @@ fn lines_layout_warns_about_each_obstacle_alone() {
     let config = lines("min_font_size = 17\n");
     assert_eq!(
         config.warnings,
-        ["zjsb_layout = \"lines\" with min_font_size 17; five rows may not fit"]
+        [
+            "zjsb_layout = \"lines\" with min_font_size 17; five rows may not fit and the +N more row is lost first"
+        ]
     );
 }
 
@@ -652,7 +654,7 @@ fn lines_layout_warnings_keep_the_design_order() {
             "zjsb_layout = \"lines\" with word_wrap = true; no columns",
             "zjsb_layout = \"lines\" with a zjsb_counts_template of 6 lines; the first 5 are used",
             "zjsb_layout = \"lines\" with 2 zjsb_more_template lines and 3 zjsb_entry_template lines; the more row will not align",
-            "zjsb_layout = \"lines\" with min_font_size 17; five rows may not fit",
+            "zjsb_layout = \"lines\" with min_font_size 17; five rows may not fit and the +N more row is lost first",
         ]
     );
 }

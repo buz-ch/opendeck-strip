@@ -310,7 +310,7 @@ The 400-character `MAX_SEGMENT` total does not apply to `lines`: each row has it
 
 Idle and attention:
 
-- A non-empty `zjsb_idle_template` replaces the whole output; its lines are rows, cut to five.
+- A non-empty `zjsb_idle_template` replaces the whole output; its lines are rows, cut to five. One template line is one cell, and a tab in its text, literal or the two characters `\t`, is a space too.
 - With an empty idle template and nothing active, the gutter stays and row 1 gets the `All clear` text as its first entry cell. With an empty counts template too, the output is that line alone.
 - `zjsb_blank_when_idle` behaves as in `segments`, and `attention_enabled: false` still shows the fixed attention-off text.
 

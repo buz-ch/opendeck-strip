@@ -353,21 +353,25 @@ impl Renderer {
         let [segment] = segments else {
             return None;
         };
-        if self.config.word_wrap || !has_tab(&segment.lines) {
+        if !has_tab(&segment.lines) {
             return None;
         }
         match mode {
-            crate::status::StripMode::Raw | crate::status::StripMode::Continuous => Some(Grid {
-                gap_spaces: self.config.column_gap,
-                mono: styled_font_is_mono(value),
-            }),
             crate::status::StripMode::Tiles => {
                 log::warn!(
-                    "tabs in a strip value need raw or continuous mode; drawing them as spaces"
+                    "tabs in a strip value need raw or continuous mode with word_wrap off; drawing them as spaces"
                 );
-                None
+                return None;
             }
+            crate::status::StripMode::Raw | crate::status::StripMode::Continuous => {}
         }
+        if self.config.word_wrap {
+            return None;
+        }
+        Some(Grid {
+            gap_spaces: self.config.column_gap,
+            mono: styled_font_is_mono(value),
+        })
     }
 
     fn layout_options(&self) -> LayoutOptions {

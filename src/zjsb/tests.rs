@@ -1048,6 +1048,7 @@ fn the_lines_layout_follows_the_row_matrix() {
     );
     // No counts template, no gutter column.
     check("", 0, &[&["[c=#66cc88][b]All clear[/b][/c]"]]);
+    // Five entries are all shown without a more row.
     check("", 5, &[&["e1", "e2", "e3"][..]; 5]);
     check(
         "",
@@ -1060,8 +1061,6 @@ fn the_lines_layout_follows_the_row_matrix() {
             &["m1", "m2", "m3"],
         ],
     );
-    // The first five entries are all shown without a more row.
-    check("", 5, &[&["e1", "e2", "e3"][..]; 5]);
 }
 
 #[test]
@@ -1190,6 +1189,32 @@ fn lines_idle_keeps_the_gutter_and_all_clear() {
         ..Options::default()
     };
     assert_eq!(text(&doc(vec![]), &o), None);
+}
+
+#[test]
+fn lines_idle_template_text_is_rendered_as_cells() {
+    let o = Options {
+        layout: Layout::Lines,
+        idle: Template::parse("head\\ntail\\tend\tlast", COUNT_FIELDS).unwrap(),
+        ..Options::default()
+    };
+    assert_eq!(
+        text(&doc(vec![]), &o).as_deref(),
+        Some("head\\ntail end last"),
+        "one template line is one cell; a tab is a space"
+    );
+}
+
+#[test]
+fn join_row_charges_two_characters_per_separator() {
+    let cells: Vec<String> = (0..4).map(|_| "x".repeat(99)).collect();
+    let row = join_row(&cells);
+    assert_eq!(
+        row.split("\\t").count(),
+        3,
+        "four 99-character cells need 402 characters; only three fit"
+    );
+    assert_eq!(row.chars().count(), 3 * 99 + 2 * 2);
 }
 
 #[test]

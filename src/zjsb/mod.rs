@@ -69,7 +69,7 @@ const SHOWN: usize = 3;
 /// A segment must stay small: lines are dropped past this many characters.
 const MAX_SEGMENT: usize = 400;
 /// Rows the `lines` layout shows at most; a legibility limit, not a config key.
-const MAX_ROWS: usize = 5;
+pub const MAX_ROWS: usize = 5;
 /// The first entry cell of the idle row in the `lines` layout.
 const ALL_CLEAR: &str = "[c=#66cc88][b]All clear[/b][/c]";
 
@@ -506,7 +506,7 @@ fn join_row(cells: &[String]) -> String {
     let mut kept: Vec<&str> = Vec::new();
     let mut chars = 0;
     for cell in cells {
-        let sep = usize::from(!kept.is_empty());
+        let sep = if kept.is_empty() { 0 } else { 2 };
         let len = cell.chars().count();
         if !kept.is_empty() && chars + sep + len > MAX_SEGMENT {
             break;
@@ -520,9 +520,6 @@ fn join_row(cells: &[String]) -> String {
 /// The counter gutter: one cell per counts line, at most [`MAX_ROWS`]. Empty
 /// when the template has no lines, so there is no gutter column.
 fn gutter(counts: &Counts, o: &Options) -> Vec<String> {
-    if o.counts.is_empty() {
-        return Vec::new();
-    }
     o.counts
         .render_cells(&counts_ctx(counts))
         .into_iter()
@@ -552,10 +549,12 @@ fn entry_rows(entries: &[Entry], counts: &Counts, o: &Options, now_ms: u64) -> V
 /// a literal `\n`.
 fn lines(entries: &[Entry], counts: &Counts, o: &Options, now_ms: u64) -> String {
     if entries.is_empty() && !o.idle.is_empty() {
-        // As in `segments`, a line whose placeholders are all empty is not a row.
-        return split_lines(&o.idle.render(&counts_ctx(counts)))
+        return o
+            .idle
+            .render_cells(&counts_ctx(counts))
             .into_iter()
             .take(MAX_ROWS)
+            .map(|cell| join_row(&[cell]))
             .collect::<Vec<_>>()
             .join("\\n");
     }

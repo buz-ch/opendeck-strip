@@ -200,7 +200,7 @@ opendeck-strip set strip '[c=orange]● 2[/c]\t[b]claude[/b]\t[c=orange]needs lo
 
 For a long-message check, put a long value in the last cell of one row. The last column should narrow and end in `…`; if it cannot hold `…`, it is dropped from every row and the cells that lost content end in `…`. Column 1 (the gutter) must stay.
 
-For idle, stop all activity: the four grey counts lines stay as the gutter and row 1 shows `All clear`. With an empty `zjsb_counts_template` the output is `All clear` alone. Check that the idle row is left-aligned as a whole, because an output with no tab is not a grid.
+For idle, stop all activity: the four grey counts lines stay as the gutter and row 1 shows `All clear`. The default idle output contains tabs, so it is a grid and left-aligned by the grid rule. With an empty `zjsb_counts_template` the output is `All clear` alone; it has no tab, so it is not a grid and follows the global `align`.
 
 Record: which mode is readable at five rows, whether a row height clips a glyph, whether truncation is obvious, and the idle layout with and without a counts template.
 
