@@ -167,6 +167,31 @@ opendeck-strip set strip 'CPU|MEM|NET|DISK'
 
 In continuous mode each segment occupies 200 logical pixels of the 800-pixel canvas. In tiles mode each occupies one 176-pixel tile. The markup in each part is parsed separately, so a tag opened in one part does not close in another.
 
+### Tab columns
+
+A tab in a single-segment strip value (one with no `|`) lays the value out as a grid of columns. This applies when the strip mode is `raw` or `continuous` (including the continuous fallback from `raw`) and `word_wrap` is off, and when at least one line holds a tab. It does not apply to keys, dials, multi-segment strips, `tiles` mode or wrapped text; a tab is drawn as four spaces there. In `tiles` mode a tab also logs a warning, because the value was probably meant as a grid. The continuous fallback joins the four dial images, so the grid still spans the strip.
+
+This covers `set strip`, `raw-string`, `strip-preview`, `watch` writing to the strip, a status file edited directly and the zj-strip-bridge writer. Both `text` and `spans` values work.
+
+Cells:
+
+- Each line is split into cells on tabs. A run or span crossing a tab keeps its style in both cells. Markup is parsed per line before the split, so a tag may span cells.
+- The number of columns is the maximum cell count of any line. Missing cells are empty; leading and trailing tabs create empty cells.
+- A line without a tab is a single cell in column 1 and counts toward that column's width; it does not span the grid.
+- An empty line still occupies a row, and each column is as wide as its widest cell.
+- The gap between columns is `column_gap` spaces (config, default 2, 0 to 16), measured once for the whole grid in the regular face of the value's base family (sans, or mono with `font = "mono"`) at the base size. Backgrounds and underlines are not painted in the gap.
+- Cells are left-aligned in their columns. The grid as a whole is left-aligned unless the strip value sets `align`; the global `align` key does not apply to grids. `valign`, `bg` and `bar` work as elsewhere.
+
+Fitting and truncation:
+
+- Auto-fit measures the grid: its width is the sum of the column widths plus the gaps, its height the line count. An explicit `size` skips auto-fit; the rules below still apply.
+- If the grid is too wide at the final size, the rightmost column is narrowed to the remaining width and its overflowing cells end in `…`.
+- If not even `…` fits in that column, the column is dropped from every row and the same rule applies to the next column to the left. Cells that lost content because of a dropped column end in `…`. Column 1 is never dropped.
+- If the rows do not fit vertically, the top rows are kept, as for other strip values.
+- Any narrowing or dropping sets the truncated flag, which the plugin reports and which drives the text-only degradation in `continuous` mode.
+
+A tab in an unsegmented strip value used to render as four spaces. In `raw` and `continuous` mode it now makes columns; this includes `watch` commands whose output contains tabs.
+
 ### Internal slice form
 
 `strip` may hold a slice spec instead of text:
@@ -246,11 +271,11 @@ Strip with segments and a non-default mode:
 
 1. **Stream.** Each `state` line carries a complete version 2 document under `doc`. `follow-zellij` starts `zellij --session S pipe --name zjsb.follow -a view=state start`; `apply-zellij` reads the same lines on standard input. `hello` is logged, `ping` and unknown types are ignored, and `error` is logged. A line without a numeric `v`, or a malformed `state` line, is logged and skipped. A version above this build's is exit code 2. A `seq` gap is only a warning, because every state line replaces the whole deck.
 
-2. **Selection.** The renderer takes the records with `on_deck: true` from the document, collects them in document order (sessions, then panes), and stable-sorts them by priority: blocked oldest first, then error, done and working newest first; tab id, pane id, pane title and session name break ties. Counts come from those records (`blocked` → needs you, `error` → failed, `done` → done, `working` → working). The strip is the counts segment plus up to three entries. With more than three, it shows the first two and a `+N more` segment whose `hidden` is the rest and whose colour, marker and `state_label` come from the highest hidden state (blocked reads "need you"). With nothing active the `zjsb_idle_template` is the whole strip; without one, the counts panel is followed by the default `All clear` text; `zjsb_blank_when_idle` clears the slots instead. `attention_enabled: false` shows the fixed `Zellij attention is off` text. Compact mode is the first entry (or the idle template, or a clear) in `zjsb_slot`.
+2. **Selection.** The renderer takes the records with `on_deck: true` from the document, collects them in document order (sessions, then panes), and stable-sorts them by priority: blocked oldest first, then error, done and working newest first; tab id, pane id, pane title and session name break ties. Counts come from those records (`blocked` → needs you, `error` → failed, `done` → done, `working` → working). In `segments` (the default layout) the strip is the counts segment plus up to three entries. With more than three, it shows the first two and a `+N more` segment whose `hidden` is the rest and whose colour, marker and `state_label` come from the highest hidden state (blocked reads "need you"). With nothing active the `zjsb_idle_template` is the whole strip; without one, the counts panel is followed by the default `All clear` text; `zjsb_blank_when_idle` clears the slots instead. `attention_enabled: false` shows the fixed `Zellij attention is off` text. Compact mode is the first entry (or the idle template, or a clear) in `zjsb_slot`. The `lines` layout is described below.
 
 3. **Templates.** The five templates live in `config.toml`: `zjsb_entry_template` (default `[b]{app|title:14}[/b]\n[c={color}]{state_label}[/c]\n{progress_pct|msg:22}`), `zjsb_counts_template` (default the four `● ✗ ✓ »` count lines), `zjsb_more_template` (default `[b]+{hidden} more[/b]\n[c={color}]{state_label}[/c]\nsee inbox`), `zjsb_compact_template` (default `[c={color}]{marker} {count}[/c]\n{app|title:8}`) and `zjsb_idle_template` (default empty).
 
-   Syntax: `{field}` inserts a value, `{field:24}` truncates to 24 characters with `…`, `{a|b|c}` takes the first non-empty value, and `{{`/`}}` are literal braces. A literal `\n` and a real newline both separate lines. A line whose placeholders are all empty is dropped, and a template is limited to 8 lines. Values are sanitised: control characters and `|` become spaces, `[` is escaped as `[[`, whitespace is collapsed, and long values are truncated. `|` in the template text itself is refused, because it would add a strip segment.
+   Syntax: `{field}` inserts a value, `{field:24}` truncates to 24 characters with `…`, `{a|b|c}` takes the first non-empty value, and `{{`/`}}` are literal braces. A literal `\n` and a real newline both separate lines. In `segments` a line whose placeholders are all empty is dropped; `lines` keeps it as an empty cell. A template is limited to 8 lines. Values are sanitised: control characters and `|` become spaces, `[` is escaped as `[[`, whitespace is collapsed, and long values are truncated. `|` in the template text itself is refused, because it would add a strip segment.
 
    Fields. Counts: `needs_you`, `failed`, `done`, `working`, `total`, and `needs_you_color`, `failed_color`, `done_color`, `working_color` (grey at zero). Entry: `app`, `title`, `state`, `state_label`, `kind`, `msg`, `progress_pct`, `tasks`, `marker`, `color`, `count`, `tab`, `pane`, `age`, `session`, `tab_name`, plus the counts fields. `+N more`: `hidden`, `state_label`, `color`, `marker`, plus the counts fields. `age` is `45s`, `3m`, `2h` or `4d`; `tasks` is `1 task` or `2 tasks`; `progress_pct` only for working records.
 
@@ -259,6 +284,49 @@ Strip with segments and a non-default mode:
 4. **Raw mode.** When the renderer writes a strip it sets `strip_mode = "raw"` in the status file once; compact mode does not. `labels` and `strip_gap` stay writer and status-file keys.
 
 5. **Throttle.** `zjsb_min_interval_ms` (default 1000) is the minimum time between two writes; the latest state wins. Text that is already shown is not rewritten. A held state is written when the interval elapses, at the end of the stream and before a reconnect. An idle, stall or grace clear resets the "shown" state, so the next identical state is written again. `--clear-on-exit`, `--grace-secs`, `--stall-secs` and `--once` keep their meanings; a state write counts as an applied frame.
+
+### The `lines` layout
+
+`zjsb_layout = "segments" | "lines"` (default `segments`) selects how strip mode lays the deck out; it has no effect in compact mode, which logs that the layout is ignored. `lines` writes one full-width segment whose rows are separated by a newline and whose cells are separated by a tab. The status file then holds real tabs and newlines, like a `set strip` value with `\t` and `\n`. A `|` is never written.
+
+Cells come from the templates:
+
+- The lines of `zjsb_counts_template` are the left gutter, one line per row.
+- The lines of `zjsb_entry_template` are the cells of one entry row, so the default three-line template gives `name | state | message` after the gutter.
+- The lines of `zjsb_more_template` are the cells of the `+N more` row.
+
+For these three templates, a line whose placeholders are all empty yields an empty cell, including its literal text, and keeps its position; in `segments` such a line is dropped. A blank template line is still removed when the config is loaded, while a line holding one space is a spacer. One template line is one cell: a tab in template text, literal or the two characters `\t`, becomes a space, so values cannot inject cells. Markup is parsed per output row, so a tag left unclosed in one template line carries into the later cells of that row.
+
+Rows:
+
+- At most five rows. The count is `min(5, max(counts lines, entry rows))`; five is a fixed legibility limit, not a config key.
+- Up to five entries are all shown. With six or more, the first four are shown and row 5 is the more template; `hidden`, `state_label`, `color` and `marker` are computed from the rest as in `segments`.
+- A counts template with more than five lines shows the first five.
+- The gutter is independent of the entries: a count next to an entry says nothing about that entry.
+- A row without a counts line still starts with an empty gutter cell, so the entry columns stay in place. A row without an entry has blank cells after the gutter.
+- A template with no lines gives no gutter column at all.
+
+The 400-character `MAX_SEGMENT` total does not apply to `lines`: each row has its own 400-character budget instead, and trailing cells past it are dropped whole. A row is never dropped by the budget. A manual `set strip` is not limited to five rows; it shrinks to fit as usual.
+
+Idle and attention:
+
+- A non-empty `zjsb_idle_template` replaces the whole output; its lines are rows, cut to five.
+- With an empty idle template and nothing active, the gutter stays and row 1 gets the `All clear` text as its first entry cell. With an empty counts template too, the output is that line alone.
+- `zjsb_blank_when_idle` behaves as in `segments`, and `attention_enabled: false` still shows the fixed attention-off text.
+
+An output without any tab (an idle replacement, the attention-off text, or a single column) is not a grid and follows the global `align`.
+
+The writer keeps the strip-owned slots and still sets `strip_mode = "raw"`. If the strip mode is later changed to `tiles`, the tabs render as spaces with the renderer warning above.
+
+With default templates and six entries, the strip shows:
+
+```text
+● 2  claude    needs login     login expired
+✗ 1  codex     needs approval  apply patch
+✓ 1  opencode  failed          rate limited
+» 2  claude    done
+     +2 more   working         see inbox
+```
 
 ### `apply-zellij`
 

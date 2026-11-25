@@ -265,6 +265,8 @@ Tags nest. An unclosed tag ends at the line end. Unknown tags are shown literall
 opendeck-strip set strip 'cpu|mem|net|disk'
 ```
 
+A tab in a single-segment strip value (one without `|`) makes tab columns in `raw` and `continuous` mode: each line is a row, cells are split on tabs, and `column_gap` spaces separate the columns. This is a change from earlier versions, which drew every tab as four spaces; it includes `watch` output that contains tabs. Keys, dials, multi-segment strips, `tiles` mode and `word_wrap` are unchanged. See [tab columns](docs/status-format.md#tab-columns).
+
 The full schema, the span object fields and the internal `@slices:<dir>#<n>` form are documented in [docs/status-format.md](docs/status-format.md).
 
 ## Configuration
@@ -282,6 +284,7 @@ The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFI
 | `line_height` | 1.15 | Line height factor, at least 0.8 |
 | `padding` | 4.0 | Inner padding in pixels |
 | `word_wrap` | false | Wrap at spaces |
+| `column_gap` | 2 | Spaces between tab columns in a full-width strip grid, clamped to 0–16 |
 | `align` | `center` | `left`, `center` or `right` |
 | `valign` | `middle` | `top`, `middle` or `bottom` |
 | `bar_color` | `#55ccff` | Progress bar fill |
@@ -296,6 +299,7 @@ The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFI
 | `watch_timeout_secs` | 5 | Timeout for `watch` commands |
 | `follow` | false | Expect `follow-zellij` to run; `doctor` then checks for a live Zellij session |
 | `zjsb_mode` | `strip` | `strip`: counts plus entries across the strip; `compact`: one entry in `zjsb_slot` |
+| `zjsb_layout` | `segments` | `segments`: counts plus entries across the strip; `lines`: one row per entry, cells in tab columns |
 | `zjsb_slot` | `dial1` | Compact mode only: `dial1` to `dial4`, or `key<row>_<col>` with row and column 1 to 9 |
 | `zjsb_blank_when_idle` | false | Clear the owned slots when nothing is active, instead of the idle text |
 | `zjsb_min_interval_ms` | 1000 | Minimum time between two writes while following; the latest state wins |
@@ -339,6 +343,7 @@ Every key is optional; a missing key keeps its default. A value that cannot be u
 # line_height = 1.15               # line height factor, at least 0.8
 # padding = 4.0                    # inner padding in pixels
 # word_wrap = false                # true | false: wrap at spaces
+# column_gap = 2                   # spaces between tab columns, 0 to 16
 # align = "center"                 # left | center | right
 # valign = "middle"                # top | middle | bottom
 # bar_color = "#55ccff"            # progress bar fill
@@ -355,6 +360,7 @@ Every key is optional; a missing key keeps its default. A value that cannot be u
 # follow = false                   # true | false: `doctor` checks for a live Zellij session
 
 # zjsb_mode = "strip"              # strip | compact
+# zjsb_layout = "segments"         # segments | lines: one row per entry with tab columns
 # zjsb_slot = "dial1"              # compact only: dial1..dial4 or key<row>_<col>, row and column 1 to 9
 # zjsb_blank_when_idle = false     # true | false: clear the owned slots instead of the idle text
 # zjsb_min_interval_ms = 1000      # minimum time between two writes, above 0
@@ -376,6 +382,8 @@ Every key is optional; a missing key keeps its default. A value that cannot be u
 # {app|title:8}"""
 # zjsb_idle_template = ""          # empty: the counts panel plus "All clear"
 ```
+
+With `zjsb_layout = "lines"` the templates change meaning: each line of `zjsb_counts_template` is one gutter cell, each line of `zjsb_entry_template` one cell of an entry row, and each line of `zjsb_more_template` one cell of the `+N more` row. The strip is one full-width segment of at most five rows, cells separated by tabs. See [the `lines` layout](docs/status-format.md#the-lines-layout).
 
 ### Migrating from the plugin
 
@@ -432,7 +440,7 @@ Never write the boot logo or any ROM data. The device SDK warns that this can br
 
 The crate is split into `cli`, `status`, `frame`, `follow`, `plugin`, `render` (`canvas`, `fonts`, `layout`, `markup`), `zjsb` (`document`, `template`, `examples`), `encode`, `sizetest`, `install`, `doctor`, `config`, `color` and `logging`.
 
-`preview.sh` and `preview/` render the 27 preview examples from the document fixtures in `tests/zjsb/` (scenario documents, `examples.toml`, expected strings) with the `zjsb_preview` example; `cargo test --test zjsb_golden` checks the same 27 strings byte for byte.
+`preview.sh` and `preview/` render the 29 preview examples from the document fixtures in `tests/zjsb/` (scenario documents, `examples.toml`, expected strings) with the `zjsb_preview` example; `cargo test --test zjsb_golden` checks the same 29 strings byte for byte.
 
 Tests:
 

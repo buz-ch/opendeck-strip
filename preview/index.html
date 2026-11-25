@@ -139,7 +139,7 @@ zj-strip-bridge status document, without a device (<code>./preview.sh</code>). E
 <pre>zjsb_slot = "dial1"</pre>
 <img src="default-compact-idle.png" width="800" height="128" alt="Nothing active">
 </section>
-<h2 id="custom">Custom templates <small>14 examples</small></h2>
+<h2 id="custom">Custom templates <small>16 examples</small></h2>
 <p class="lead">The same documents laid out with <code>zjsb_entry_template</code>, <code>zjsb_counts_template</code>, <code>zjsb_more_template</code>, <code>zjsb_compact_template</code> and <code>zjsb_idle_template</code>.</p>
 <h4>Strip</h4>
 <p class="lead">Templates for the touch strip.</p>
@@ -214,6 +214,22 @@ zj-strip-bridge status document, without a device (<code>./preview.sh</code>). E
 <p class="meta">Example <code>more-segment</code>, scenario <code>busy</code></p>
 <pre>zjsb_more_template = "[s=1.6][c={color}]{marker}[/c][/s] [b]+{hidden}[/b]\n[c={color}]{state_label}[/c]"</pre>
 <img src="more-segment.png" width="800" height="128" alt="The +N more segment">
+</section>
+<h4>The lines layout</h4>
+<p class="lead"><code>zjsb_layout = "lines"</code>: one full-width segment whose rows are tab-separated cells. The counts template is the left gutter, and each entry template line is one column.</p>
+<section id="lines-agents">
+<h3><span class="badge cus">Custom</span> Three agents on three rows</h3>
+<p>The default templates as a grid: marker and count, name, state, message.</p>
+<p class="meta">Example <code>lines-agents</code>, scenario <code>agents</code></p>
+<pre>zjsb_layout = "lines"</pre>
+<img src="lines-agents.png" width="800" height="128" alt="Three agents on three rows">
+</section>
+<section id="lines-busy">
+<h3><span class="badge cus">Custom</span> Six agents on five rows</h3>
+<p>Five is the limit; the last row folds the hidden panes into the more template.</p>
+<p class="meta">Example <code>lines-busy</code>, scenario <code>busy</code></p>
+<pre>zjsb_layout = "lines"</pre>
+<img src="lines-busy.png" width="800" height="128" alt="Six agents on five rows">
 </section>
 <h4>One slot (compact mode)</h4>
 <p class="lead"><code>zjsb_compact_template</code> and <code>zjsb_idle_template</code>, with the mode and the slot set.</p>

@@ -173,6 +173,37 @@ Goal: confirm recovery after a cable disconnect and after an OpenDeck restart.
 
 Record: whether the device reappears without a restart, whether the strip and dials restore automatically, whether a stale or blank frame remains, and whether OpenDeck or the plugin needed a manual restart. Note whether the status file survived and whether the plugin logged a clean close.
 
+### 7. Five-row lines layout
+
+Goal: check that five tab-separated rows stay legible in `raw` and `continuous` mode, that long messages are truncated rather than dropping a column, and that the idle row keeps its gutter.
+
+Local references:
+
+```sh
+./preview.sh
+```
+
+Compare the device with `preview/lines-busy.png` (six panes, four entries plus the more row) and `preview/lines-agents.png` (three panes).
+
+With a running `zj-strip-bridge` deck of six active panes:
+
+```sh
+OPENDECK_STRIP_ZJSB_LAYOUT=lines opendeck-strip follow-zellij
+```
+
+The writer sets `strip_mode = "raw"`, so this is the five-row raw case. Check the gutter, the name, state and message columns, the `+N more` row, and whether the smallest row height is readable. Then force the continuous case by hand, because the writer resets the mode to `raw` on every write:
+
+```sh
+opendeck-strip set strip_mode continuous
+opendeck-strip set strip '[c=orange]● 2[/c]\t[b]claude[/b]\t[c=orange]needs login[/c]\tlogin expired\n[c=red]✗ 1[/c]\t[b]codex[/b]\t[c=orange]needs approval[/c]\tapply patch\n[c=green]✓ 1[/c]\t[b]opencode[/b]\t[c=red]failed[/c]\trate limited\n[c=#55ccff]» 2[/c]\t[b]claude[/b]\t[c=green]done[/c]\t\n\t[b]+2 more[/b]\t[c=#55ccff]working[/c]\tsee inbox'
+```
+
+For a long-message check, put a long value in the last cell of one row. The last column should narrow and end in `…`; if it cannot hold `…`, it is dropped from every row and the cells that lost content end in `…`. Column 1 (the gutter) must stay.
+
+For idle, stop all activity: the four grey counts lines stay as the gutter and row 1 shows `All clear`. With an empty `zjsb_counts_template` the output is `All clear` alone. Check that the idle row is left-aligned as a whole, because an output with no tab is not a grid.
+
+Record: which mode is readable at five rows, whether a row height clips a glyph, whether truncation is obvious, and the idle layout with and without a counts template.
+
 ## Results
 
 | Date | Firmware | OpenDeck | AKP05 build | Check | Mode | Result | Notes |

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Render the preview images and preview/index.html with opendeck-strip (no device).
-#   ./preview.sh          the 27 examples of tests/zjsb/examples.toml into preview/
+#   ./preview.sh          the 29 examples of tests/zjsb/examples.toml into preview/
 #   ./preview.sh NAME     one of them, as preview/adhoc.png
 # Each example names a scenario document (tests/zjsb/scenarios/) and its
 # `zjsb_*` keys; `cargo run --example zjsb_preview -- NAME` renders the strip
@@ -21,7 +21,9 @@ preview() { # example-name: the strip string on stdout
 render() { # example-name
   name=$1
   s=$(preview "$name") || exit 1
-  "$BIN" raw-string "$s" --out "preview/$name.png" >/dev/null || exit 1
+  # The rendered string is complete; the raw-string command must not read the
+  # user's own config (word_wrap would change every example).
+  OPENDECK_STRIP_CONFIG=/dev/null "$BIN" raw-string "$s" --out "preview/$name.png" >/dev/null || exit 1
   echo "preview/$name.png"
 }
 
@@ -90,6 +92,9 @@ example custom progress "Progress first" "Working panes show their percentage, o
 example custom kind "State and kind" "The raw protocol values, <code>{state}</code> and <code>{kind}</code>, for people who want them." mixed
 example custom where "Where is it?" "Tab and pane ids, to find the pane that needs you." mixed
 example custom more-segment "The +N more segment" "<code>zjsb_more_template</code>, here with the marker and the number of hidden panes." busy
+subhead custom "The lines layout" "<code>zjsb_layout = \"lines\"</code>: one full-width segment whose rows are tab-separated cells. The counts template is the left gutter, and each entry template line is one column."
+example custom lines-agents "Three agents on three rows" "The default templates as a grid: marker and count, name, state, message." agents
+example custom lines-busy "Six agents on five rows" "Five is the limit; the last row folds the hidden panes into the more template." busy
 subhead custom "One slot (compact mode)" "<code>zjsb_compact_template</code> and <code>zjsb_idle_template</code>, with the mode and the slot set."
 example custom compact-custom "Compact with age" "<code>zjsb_compact_template</code> with the age." agents
 example custom compact-ratio "Compact: ratio" "Waiting panes out of all active ones." mixed

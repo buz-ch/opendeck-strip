@@ -14,6 +14,10 @@ follow = true
 
 # "strip": the four-segment touch strip. "compact": one dial or key.
 zjsb_mode = "strip"
+# "segments": counts plus entries across the strip. "lines": one full-width
+# segment, one row per entry, the counts template as the left gutter. Needs
+# strip mode; tabs in the strip value then make columns (raw or continuous).
+# zjsb_layout = "segments"
 # zjsb_slot = "dial1"        # compact only: dial1..dial4 or key<row>_<col>
 
 # Nothing active: false keeps the counts panel plus "All clear"; true clears
@@ -25,7 +29,9 @@ zjsb_min_interval_ms = 1000
 
 # ---- templates -------------------------------------------------------------
 # Empty lines in a template are ignored. {age} is computed when a document
-# arrives and is not refreshed until the next one.
+# arrives and is not refreshed until the next one. With zjsb_layout = "lines"
+# each line is one cell of a row: the counts lines form the gutter, the entry
+# lines the entry cells, and the more lines the +N more row.
 # Fields: app, title, state, state_label, kind, msg, progress_pct, tasks,
 # marker, color, count, tab, pane, age, session, tab_name, plus the count
 # fields (needs_you, failed, done, working, total and the four *_color).
@@ -70,6 +76,9 @@ zjsb_idle_template = ""
 
 # Tile gap in pixels, 0 to 32.
 # strip_gap = 28
+
+# Gap between tab columns in a full-width strip grid, 0 to 16.
+# column_gap = 2
 
 # Give all auto-sized strip segments the same font size; optionally leave the
 # counts panel (segment 1) out of the shared size.
