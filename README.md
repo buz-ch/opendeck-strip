@@ -399,6 +399,12 @@ Keys receive OpenDeck titles, so inline styling on a key is flattened to plain t
 
 Logs go to standard error and to `<status file>.log`. The default level is `info`; use `RUST_LOG=debug` for more detail. Every CLI command also appends to that log.
 
+Every stream logs its `hello` line at `info`: `state stream: plugin zj-strip-bridge version 0.0.1 build <build> session S view state`. That `build` is the git commit and the UTC build time of the wasm the Zellij session loaded, so the `follow-zellij` log says which plugin build a session runs, not which one is on disk.
+
+Every `state` document is logged at `info` too, as `state: synced=true 2 session(s) [work, play], 3 record(s), 1 on deck: claude/blocked, cargo/working`: the session names, the record and on-deck counts, and the first four records as `app/state`. A deck that shows nothing can be traced to one of these lines — `synced=false`, `0 record(s)`, or records that are there but not on deck.
+
+**A short-lived record may never reach the deck.** The plugin publishes a document when it changed, at most every `min_interval_ms` (1 s by default), so a record that leaves Zellij's attention state inside that window is gone before the next document: measured on a live desktop, 42 ms for a bare `printf` at a prompt, whose status is reset when the command returns. Such a record appears in the log once, or not at all, and the deck never shows it. A record needs about two seconds more still to appear in another session's document. Emit from a program that keeps running, or from a pane on a hidden tab, when the record must be seen.
+
 `opendeck-strip doctor` is the first check. It reports the status path and its source, whether the file parses, whether a running OpenDeck process resolves the same status path, which plugin directory is installed, whether the plugin binary is executable, whether `zellij` is on `PATH` and new enough for `follow-zellij` (0.46.0), hidraw access, and the AKP05 version. With `follow = true` it also checks for a live Zellij session. It also reports whether an AKP05 raw socket exists (a warning when `strip_mode` is `raw` and none does). It also prints the last full-strip line from the AKP05 log, which carries the device firmware and the chosen renderer (`ImageSlot(n)`, or `Bgpic` when the override is set). AKP05 versions below 0.12.0 are a failure for continuous mode and only a warning when `strip_mode` is `tiles`. The command exits non-zero on failures; warnings alone leave the exit code at zero.
 
 Nothing appears on the device:

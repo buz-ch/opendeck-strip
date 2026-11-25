@@ -15,7 +15,10 @@ use crate::cli::{self, OnGap};
 use crate::config::Config;
 use crate::frame::{self, ParseError};
 use crate::status::{self, Status};
-use crate::zjsb::{self, document::Document};
+use crate::zjsb::{
+    self,
+    document::{Document, Record},
+};
 
 /// Which stream `follow-zellij` and `apply-zellij` read.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
@@ -50,13 +53,7 @@ pub fn parse_state_line(line: &str) -> Result<StateLine, ParseError> {
     match map.get("type").and_then(Value::as_str) {
         None => return Err(ParseError::Skip),
         Some("hello") => {
-            log::info!(
-                "state stream: plugin {} version {} session {} view {}",
-                map.get("plugin").and_then(Value::as_str).unwrap_or("?"),
-                map.get("version").and_then(Value::as_str).unwrap_or("?"),
-                map.get("session").and_then(Value::as_str).unwrap_or("?"),
-                map.get("view").and_then(Value::as_str).unwrap_or("?")
-            );
+            log::info!("{}", describe_hello(&map));
             return Ok(none);
         }
         Some("ping") => return Ok(none),
@@ -86,6 +83,54 @@ pub fn parse_state_line(line: &str) -> Result<StateLine, ParseError> {
         doc: Some(doc),
         seq,
     })
+}
+
+/// The `hello` line for the log: which plugin, which build. The build is the
+/// git commit and the build time of the wasm the session loaded, so it tells a
+/// live session's build apart from the one on disk. `?` for a plugin that does
+/// not send a field.
+fn describe_hello(map: &serde_json::Map<String, Value>) -> String {
+    let field = |name: &str| map.get(name).and_then(Value::as_str).unwrap_or("?");
+    format!(
+        "state stream: plugin {} version {} build {} session {} view {}",
+        field("plugin"),
+        field("version"),
+        field("build"),
+        field("session"),
+        field("view")
+    )
+}
+
+/// One `state` document for the log: what this connection read. The records are
+/// `app/state`, the first few of them, so a deck that shows nothing can be
+/// traced to a document that carries nothing.
+fn describe_state(doc: &Document) -> String {
+    let records: Vec<&Record> = doc.sessions.iter().flat_map(|s| s.panes.iter()).collect();
+    let names: Vec<&str> = doc.sessions.iter().map(|s| s.name.as_str()).collect();
+    let shown: Vec<String> = records
+        .iter()
+        .take(4)
+        .map(|r| format!("{}/{}", r.app.as_deref().unwrap_or("?"), r.state))
+        .collect();
+    let more = records.len().saturating_sub(shown.len());
+    format!(
+        "state: synced={} {} session(s) [{}], {} record(s), {} on deck{}{}",
+        doc.synced,
+        names.len(),
+        names.join(", "),
+        records.len(),
+        records.iter().filter(|r| r.on_deck).count(),
+        if shown.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", shown.join(", "))
+        },
+        if more > 0 {
+            format!(", … {more} more")
+        } else {
+            String::new()
+        },
+    )
 }
 
 /// A frame the throttle is holding back.
@@ -319,6 +364,7 @@ impl Handler for StateHandler {
         let Some(doc) = parsed.doc else {
             return Ok(LineOutcome::Continue);
         };
+        log::info!("{}", describe_state(&doc));
         self.writer.stage(&doc, now_ms);
         if self.writer.pending_due(now) {
             let (path, writer) = (&self.path, &mut self.writer);

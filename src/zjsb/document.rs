@@ -93,6 +93,11 @@ pub struct Document {
     pub version: u32,
     #[serde(default)]
     pub generated_ms: u64,
+    /// `false` while the plugin has no attention state, so its empty document
+    /// means "not the merged view" rather than "nothing is on deck". A plugin
+    /// that does not send the field is assumed to have it.
+    #[serde(default = "de::yes")]
+    pub synced: bool,
     /// Without the flag the document does not claim that attention is off.
     #[serde(default = "de::yes")]
     pub attention_enabled: bool,

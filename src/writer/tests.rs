@@ -298,6 +298,87 @@ fn non_state_lines_are_ignored() {
 }
 
 #[test]
+fn the_hello_log_line_names_the_build() {
+    let line = json!({
+        "v": 1,
+        "type": "hello",
+        "plugin": "zj-strip-bridge",
+        "version": "0.0.1",
+        "build": "b6525962f7ae-dirty-20261124-201922",
+        "session": "work",
+        "view": "state",
+        "seq": 0,
+    });
+    let Value::Object(map) = line else {
+        unreachable!("an object");
+    };
+    assert_eq!(
+        describe_hello(&map),
+        "state stream: plugin zj-strip-bridge version 0.0.1 \
+         build b6525962f7ae-dirty-20261124-201922 session work view state"
+    );
+    let Value::Object(old) = json!({"type": "hello", "plugin": "zj-strip-bridge"}) else {
+        unreachable!("an object");
+    };
+    assert_eq!(
+        describe_hello(&old),
+        "state stream: plugin zj-strip-bridge version ? build ? session ? view ?",
+        "a plugin without the field says so"
+    );
+}
+
+#[test]
+fn the_state_log_line_says_what_was_read() {
+    let line = json!({
+        "v": 1,
+        "type": "state",
+        "seq": 1,
+        "doc": {
+            "version": 2,
+            "synced": true,
+            "attention_enabled": true,
+            "sessions": [
+                {"name": "work", "is_current": true, "panes": [
+                    {"app": "claude", "state": "blocked", "on_deck": true},
+                    {"app": "cargo", "state": "working", "on_deck": false}
+                ]},
+                {"name": "play", "is_current": false, "panes": []}
+            ]
+        }
+    });
+    let StateLine { doc: Some(doc), .. } = parse_state_line(&line.to_string()).expect("a document")
+    else {
+        unreachable!("a document")
+    };
+    assert_eq!(
+        describe_state(&doc),
+        "state: synced=true 2 session(s) [work, play], 2 record(s), 1 on deck: \
+         claude/blocked, cargo/working"
+    );
+    let blind = json!({"type": "state", "v": 1, "doc": {"version": 2, "synced": false}});
+    let StateLine {
+        doc: Some(blind), ..
+    } = parse_state_line(&blind.to_string()).expect("a document")
+    else {
+        unreachable!("a document")
+    };
+    assert_eq!(
+        describe_state(&blind),
+        "state: synced=false 0 session(s) [], 0 record(s), 0 on deck",
+        "an instance without the attention state says so"
+    );
+    let old = json!({"type": "state", "v": 1, "doc": {"version": 2}});
+    let StateLine { doc: Some(old), .. } = parse_state_line(&old.to_string()).expect("a document")
+    else {
+        unreachable!("a document")
+    };
+    assert!(
+        old.synced,
+        "a plugin that does not send the field is assumed to have it"
+    );
+}
+
+#[test]
 fn a_state_line_carries_its_document_and_seq() {
     let line = json!({
         "v": 1,
