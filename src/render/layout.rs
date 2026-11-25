@@ -527,7 +527,13 @@ fn measure_row(cells: &[Vec<Run>], size: f32, options: &LayoutOptions, fonts: &F
     let mut ascent = 0.0f32;
     let mut descent = 0.0f32;
     let mut max_size = 0.0f32;
-    for cell in &cells {
+    // An empty cell carries base-size fallback metrics, which would make a row
+    // of small text taller. They only count when the whole row is empty.
+    let all_empty = cells.iter().all(|cell| cell.placements.is_empty());
+    for cell in cells
+        .iter()
+        .filter(|cell| all_empty || !cell.placements.is_empty())
+    {
         ascent = ascent.max(cell.ascent);
         descent = descent.min(cell.descent);
         max_size = max_size.max(cell.max_size);
@@ -736,19 +742,32 @@ fn truncate_column(
 /// to the cell in the last kept column, narrowed to that column.
 fn drop_column(rows: &mut [GridRow], index: usize, size: f32, keep_width: f32, fonts: &Fonts) {
     for row in rows {
-        let lost_content = row
+        let lost = row
             .cells
             .get(index)
-            .is_some_and(|cell| !cell.text.is_empty());
+            .filter(|cell| !cell.text.is_empty())
+            .and_then(|cell| cell.placements.first())
+            .map(|placed| (placed.run.size, placed.run.mono));
         row.cells.truncate(index);
-        if !lost_content {
+        let Some((lost_size, lost_mono)) = lost else {
             continue;
-        }
+        };
         while row.cells.len() < index {
             row.cells.push(empty_cell(size, fonts));
         }
         let cell = &row.cells[index - 1];
-        let line = truncate_line_forced(&cell_as_line(cell), size, keep_width, fonts);
+        let mut kept = cell_as_line(cell);
+        if kept.placements.is_empty() {
+            // The row's height comes from its content, so an `…` in an empty
+            // cell takes the size of what it stands for.
+            let style = Run {
+                size: lost_size,
+                mono: lost_mono,
+                ..Run::default()
+            };
+            kept.placements = measure(&[style], size, fonts).placements;
+        }
+        let line = truncate_line_forced(&kept, size, keep_width, fonts);
         let cell = cell_from_line(cell, line);
         row.cells[index - 1] = cell;
     }
@@ -1049,17 +1068,13 @@ fn truncate_line_impl(
         .last()
         .map(|p| p.run.clone())
         .unwrap_or_default();
-    let ellipsis = Run {
-        text: "…".to_owned(),
-        ..fallback_style.clone()
-    };
-    let ellipsis_width = measure_width(std::slice::from_ref(&ellipsis), size, fonts);
-    let budget = (max_width - ellipsis_width).max(0.0);
 
+    // Take every character that fits, then back off until the `…` fits too. It
+    // takes the style of the last character kept, so its width is only known
+    // once that character is.
     let mut out: Vec<Run> = Vec::new();
     let mut cursor = 0.0f32;
     let mut prev: Option<(&Face, GlyphId)> = None;
-    let mut last_style = fallback_style;
 
     'outer: for placed in &line.placements {
         let run = &placed.run;
@@ -1074,34 +1089,46 @@ fn truncate_line_impl(
                         _ => 0.0,
                     };
                     let advance = kern + font.h_advance(id);
-                    if cursor + advance > budget {
+                    if cursor + advance > max_width {
                         break 'outer;
                     }
                     cursor += advance;
                     prev = Some((face, id));
                 }
-                GlyphSource::Placeholder { face } => {
+                GlyphSource::Placeholder { .. } => {
                     let advance = placed.size * 0.6;
-                    if cursor + advance > budget {
+                    if cursor + advance > max_width {
                         break 'outer;
                     }
                     cursor += advance;
                     prev = None;
-                    let _ = face;
                 }
             }
             let mut out_run = run.clone();
             out_run.text = c.to_string();
-            push_merged(&mut out, out_run.clone());
-            last_style = out_run;
+            push_merged(&mut out, out_run);
         }
     }
 
-    out.push(Run {
-        text: "…".to_owned(),
-        ..last_style
-    });
-    measure_line(&out, size, &default_options(), fonts)
+    loop {
+        let style = out.last().unwrap_or(&fallback_style).clone();
+        let mut candidate = out.clone();
+        candidate.push(Run {
+            text: "…".to_owned(),
+            ..style
+        });
+        let truncated = measure_line(&candidate, size, &default_options(), fonts);
+        let Some(last) = out.last_mut() else {
+            return truncated;
+        };
+        if truncated.width <= max_width {
+            return truncated;
+        }
+        last.text.pop();
+        if last.text.is_empty() {
+            out.pop();
+        }
+    }
 }
 
 fn default_options() -> LayoutOptions {
@@ -1624,6 +1651,44 @@ mod tests {
         assert_eq!(cells[0].len(), 2, "{cells:?}");
         assert_eq!(cells[1][1], "…", "{cells:?}");
         assert!(cells[0][1].ends_with('…'), "{cells:?}");
+    }
+
+    #[test]
+    fn empty_cells_do_not_make_a_small_row_taller() {
+        let small = Run {
+            size: 0.5,
+            ..Run::plain("a")
+        };
+        let opts = options();
+        let fonts = Fonts::embedded();
+        let height = |runs: Vec<Run>| measure_row(&split_cells(&runs), 40.0, &opts, fonts).height;
+        let alone = height(vec![small.clone()]);
+        for text in ["a\t", "\ta", "a\t\ta"] {
+            let run = Run {
+                text: text.to_owned(),
+                ..small.clone()
+            };
+            assert_eq!(height(vec![run]), alone, "{text:?}");
+        }
+        assert!(height(Vec::new()) > alone);
+    }
+
+    #[test]
+    fn a_truncated_mixed_size_line_stays_in_its_width() {
+        let fonts = Fonts::embedded();
+        let runs = [
+            Run {
+                size: 3.0,
+                ..Run::plain("WWWWWWWWWW")
+            },
+            Run::plain("ii"),
+        ];
+        let line = measure_line(&runs, 10.0, &options(), fonts);
+        for width in (60..200).step_by(3) {
+            let width = width as f32;
+            let cut = truncate_line(&line, 10.0, width, fonts);
+            assert!(cut.width <= width, "{width}: {}", cut.width);
+        }
     }
 
     #[test]
