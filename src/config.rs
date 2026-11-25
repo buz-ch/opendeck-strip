@@ -21,6 +21,8 @@ pub struct Config {
     pub max_font_size: f32,
     pub line_height: f32,
     pub padding: f32,
+    /// Spaces between the columns of a strip grid.
+    pub column_gap: u32,
     pub word_wrap: bool,
     pub align: String,
     pub valign: String,
@@ -45,6 +47,8 @@ pub struct Config {
 
     /// `strip`: the 4-segment strip. `compact`: one slot (`zjsb_slot`).
     pub zjsb_mode: String,
+    /// `strip` only: `segments` (four segments) or `lines` (one grid).
+    pub zjsb_layout: String,
     /// Compact only: `dial1`..`dial4` or `key<row>_<col>`.
     pub zjsb_slot: String,
     /// Clear the deck when nothing is active, instead of the idle text.
@@ -79,6 +83,7 @@ impl Default for Config {
             max_font_size: 96.0,
             line_height: 1.15,
             padding: 4.0,
+            column_gap: 2,
             word_wrap: false,
             align: "center".to_owned(),
             valign: "middle".to_owned(),
@@ -94,6 +99,7 @@ impl Default for Config {
             watch_timeout_secs: 5,
             follow: false,
             zjsb_mode: "strip".to_owned(),
+            zjsb_layout: "segments".to_owned(),
             zjsb_slot: "dial1".to_owned(),
             zjsb_blank_when_idle: false,
             zjsb_min_interval_ms: 1000,
@@ -206,7 +212,7 @@ impl Config {
         }
     }
 
-    /// The one check that needs two keys; every single-key clamp lives in [`KEYS`].
+    /// The checks that need more than one key; every single-key clamp lives in [`KEYS`].
     fn normalise(&mut self) {
         if self.max_font_size < self.min_font_size {
             let kept = trim_num(self.min_font_size.to_string());
@@ -216,8 +222,58 @@ impl Config {
             ));
             self.max_font_size = self.min_font_size;
         }
+        self.lines_warnings();
+    }
+
+    /// `zjsb_layout = "lines"` works with some settings better than others; no
+    /// value changes, each line names the key, the value and the consequence.
+    fn lines_warnings(&mut self) {
+        if self.zjsb_layout != "lines" {
+            return;
+        }
+        if self.zjsb_mode == "compact" {
+            self.warnings.push(
+                "zjsb_layout = \"lines\" with zjsb_mode = \"compact\"; the layout is ignored"
+                    .to_owned(),
+            );
+            return;
+        }
+        if self.word_wrap {
+            self.warnings
+                .push("zjsb_layout = \"lines\" with word_wrap = true; no columns".to_owned());
+        }
+        // A template that does not parse has its own warning; no line count.
+        let count = |text: &str, fields: &[&str]| {
+            Template::parse(text, fields).ok().map(|t| t.line_count())
+        };
+        let counts = count(&self.zjsb_counts_template, crate::zjsb::COUNT_FIELDS);
+        if let Some(counts) = counts.filter(|n| *n > LINES_ROWS) {
+            self.warnings.push(format!(
+                "zjsb_layout = \"lines\" with a zjsb_counts_template of {counts} lines; the first {LINES_ROWS} are used"
+            ));
+        }
+        if let (Some(entry), Some(more)) = (
+            count(&self.zjsb_entry_template, ENTRY_AND_COUNTS),
+            count(&self.zjsb_more_template, MORE_AND_COUNTS),
+        ) && entry != more
+        {
+            self.warnings.push(format!(
+                "zjsb_layout = \"lines\" with {more} zjsb_more_template lines and {entry} zjsb_entry_template lines; the more row will not align"
+            ));
+        }
+        if self.min_font_size > LINES_MAX_MIN_FONT_SIZE {
+            self.warnings.push(format!(
+                "zjsb_layout = \"lines\" with min_font_size {}; five rows may not fit",
+                trim_num(self.min_font_size.to_string())
+            ));
+        }
     }
 }
+
+/// Rows the `lines` layout shows (five is the zjsb side's fixed limit).
+const LINES_ROWS: usize = 5;
+/// Above this the five rows of the `lines` layout may not fit the strip.
+const LINES_MAX_MIN_FONT_SIZE: f32 = 16.0;
 
 /// Where a value came from, and how a warning names it: the key and the value as
 /// written, then `<reason>; using <kept>`.
@@ -489,6 +545,7 @@ key_table! {
     "max_font_size" => max_font_size: Kind::Num { real: true, min: Limit::Any, max: None },
     "line_height" => line_height: Kind::Num { real: true, min: Limit::AtLeast(0.8), max: None },
     "padding" => padding: Kind::Num { real: true, min: Limit::AtLeast(0.0), max: None },
+    "column_gap" => column_gap: Kind::Num { real: false, min: Limit::AtLeast(0.0), max: Some(16.0) },
     "word_wrap" => word_wrap: Kind::Bool,
     "align" => align: Kind::Enum("one of left, center, right", |s| Align::parse(s).is_some()),
     "valign" => valign: Kind::Enum("one of top, middle, bottom", |s| VAlign::parse(s).is_some()),
@@ -504,6 +561,7 @@ key_table! {
     "watch_timeout_secs" => watch_timeout_secs: Kind::Num { real: false, min: Limit::Above(0.0), max: None },
     "follow" => follow: Kind::Bool,
     "zjsb_mode" => zjsb_mode: Kind::Enum("one of strip, compact", is_zjsb_mode),
+    "zjsb_layout" => zjsb_layout: Kind::Enum("one of segments, lines", is_zjsb_layout),
     "zjsb_slot" => zjsb_slot: Kind::Enum(SLOTS, is_zjsb_slot),
     "zjsb_blank_when_idle" => zjsb_blank_when_idle: Kind::Bool,
     "zjsb_min_interval_ms" => zjsb_min_interval_ms: Kind::Num { real: false, min: Limit::Above(0.0), max: None },
@@ -551,6 +609,10 @@ fn env_key(name: &str) -> Option<&'static Key> {
 
 fn is_zjsb_mode(s: &str) -> bool {
     matches!(s, "strip" | "compact")
+}
+
+fn is_zjsb_layout(s: &str) -> bool {
+    matches!(s, "segments" | "lines")
 }
 
 /// The plugin's `valid_slot`: `dial1`..`dial4` or `key<row>_<col>`, row and col 1..=9.

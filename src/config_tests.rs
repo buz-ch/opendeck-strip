@@ -61,7 +61,7 @@ fn parses_toml() {
 #[test]
 fn every_key_loads_from_the_file_and_the_environment() {
     // Fields of `Config` minus `warnings`.
-    assert_eq!(KEYS.len(), 37);
+    assert_eq!(KEYS.len(), 39);
     let defaults = Config::default();
     let mut text = String::new();
     let mut vars: Vec<(std::ffi::OsString, std::ffi::OsString)> = Vec::new();
@@ -90,6 +90,7 @@ fn every_key_loads_from_the_file_and_the_environment() {
                 "valign" => "top",
                 "zjsb_mode" => "compact",
                 "zjsb_slot" => "key2_3",
+                "zjsb_layout" => "lines",
                 _ => unreachable!(),
             }
             .to_owned(),
@@ -112,8 +113,11 @@ fn every_key_loads_from_the_file_and_the_environment() {
         .iter()
         .map(|(k, v)| (k.to_str().unwrap(), v.to_str().unwrap()))
         .collect::<Vec<_>>());
-    assert!(by_file.warnings.is_empty(), "{:?}", by_file.warnings);
-    assert!(by_env.warnings.is_empty(), "{:?}", by_env.warnings);
+    // `zjsb_mode = "compact"` with `zjsb_layout = "lines"`: only the layout
+    // warning, the others are about a strip that does not exist (D2).
+    let ignored = "zjsb_layout = \"lines\" with zjsb_mode = \"compact\"; the layout is ignored";
+    assert_eq!(by_file.warnings, [ignored]);
+    assert_eq!(by_env.warnings, [ignored]);
     for key in KEYS {
         let name = key.name;
         let text = (key.get)(&by_file);
@@ -524,4 +528,139 @@ fn the_example_config_is_valid_and_keeps_the_default_templates() {
         crate::zjsb::Options::from_config(&config),
         crate::zjsb::Options::default()
     );
+}
+
+#[test]
+fn layout_and_gap_keys_load_from_the_file_and_the_environment() {
+    let defaults = Config::default();
+    assert_eq!(defaults.column_gap, 2);
+    assert_eq!(defaults.zjsb_layout, "segments");
+
+    let config = from_toml("column_gap = 4\nzjsb_layout = \"lines\"\n");
+    assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+    assert_eq!(config.column_gap, 4);
+    assert_eq!(config.zjsb_layout, "lines");
+
+    let config = env(&[
+        ("OPENDECK_STRIP_COLUMN_GAP", "3"),
+        ("OPENDECK_STRIP_ZJSB_LAYOUT", "lines"),
+    ]);
+    assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+    assert_eq!(config.column_gap, 3);
+    assert_eq!(config.zjsb_layout, "lines");
+}
+
+#[test]
+fn column_gap_is_a_whole_number_from_0_to_16() {
+    for (text, kept) in [("0", 0), ("2", 2), ("16", 16)] {
+        let config = from_toml(&format!("column_gap = {text}\n"));
+        assert!(config.warnings.is_empty(), "{text}: {:?}", config.warnings);
+        assert_eq!(config.column_gap, kept, "{text}");
+    }
+    for (text, warning, kept) in [
+        ("-1", "is below 0; using 0", 0),
+        ("17", "is above 16; using 16", 16),
+        ("2.5", "is not a whole number; using 2", 2),
+    ] {
+        let config = from_toml(&format!("column_gap = {text}\n"));
+        assert_eq!(
+            config.warnings,
+            [format!("{AT}column_gap = {text} {warning}")]
+        );
+        assert_eq!(config.column_gap, kept, "{text}");
+    }
+}
+
+#[test]
+fn bad_layout_keeps_segments() {
+    let config = from_toml("zjsb_layout = \"grid\"\n");
+    assert_eq!(
+        config.warnings,
+        [format!(
+            "{AT}zjsb_layout = \"grid\" is not one of segments, lines; using segments"
+        )]
+    );
+    assert_eq!(config.zjsb_layout, "segments");
+}
+
+#[test]
+fn lines_layout_warns_about_each_obstacle_alone() {
+    let lines = |text: &str| from_toml(&format!("zjsb_layout = \"lines\"\n{text}"));
+
+    assert!(lines("").warnings.is_empty(), "the defaults are fine");
+    // D2: compact mode logs only the layout warning.
+    let config = lines("zjsb_mode = \"compact\"\nword_wrap = true\nmin_font_size = 20\n");
+    assert_eq!(
+        config.warnings,
+        ["zjsb_layout = \"lines\" with zjsb_mode = \"compact\"; the layout is ignored"]
+    );
+    assert!(
+        config.word_wrap && config.min_font_size == 20.0,
+        "no value changed"
+    );
+
+    let config = lines("word_wrap = true\n");
+    assert_eq!(
+        config.warnings,
+        ["zjsb_layout = \"lines\" with word_wrap = true; no columns"]
+    );
+
+    let config = lines("zjsb_counts_template = \"1\\n2\\n3\\n4\\n5\\n6\"\n");
+    assert_eq!(
+        config.warnings,
+        ["zjsb_layout = \"lines\" with a zjsb_counts_template of 6 lines; the first 5 are used"]
+    );
+    assert!(
+        lines("zjsb_counts_template = \"1\\n2\\n3\\n4\\n5\"\n")
+            .warnings
+            .is_empty(),
+        "five counts lines fit"
+    );
+
+    let config = lines("zjsb_more_template = \"{hidden}\\n{color}\"\n");
+    assert_eq!(
+        config.warnings,
+        [
+            "zjsb_layout = \"lines\" with 2 zjsb_more_template lines and 3 zjsb_entry_template lines; the more row will not align"
+        ]
+    );
+    let config = lines("zjsb_entry_template = \"{app}\\n{state}\"\n");
+    assert_eq!(
+        config.warnings,
+        [
+            "zjsb_layout = \"lines\" with 3 zjsb_more_template lines and 2 zjsb_entry_template lines; the more row will not align"
+        ]
+    );
+
+    let at_limit = lines("min_font_size = 16\n");
+    assert!(at_limit.warnings.is_empty(), "{:?}", at_limit.warnings);
+    let config = lines("min_font_size = 17\n");
+    assert_eq!(
+        config.warnings,
+        ["zjsb_layout = \"lines\" with min_font_size 17; five rows may not fit"]
+    );
+}
+
+#[test]
+fn lines_layout_warnings_keep_the_design_order() {
+    let config = from_toml(
+        "zjsb_layout = \"lines\"\nword_wrap = true\nzjsb_counts_template = \"1\\n2\\n3\\n4\\n5\\n6\"\nzjsb_more_template = \"{hidden}\\n{color}\"\nmin_font_size = 17\n",
+    );
+    assert_eq!(
+        config.warnings,
+        [
+            "zjsb_layout = \"lines\" with word_wrap = true; no columns",
+            "zjsb_layout = \"lines\" with a zjsb_counts_template of 6 lines; the first 5 are used",
+            "zjsb_layout = \"lines\" with 2 zjsb_more_template lines and 3 zjsb_entry_template lines; the more row will not align",
+            "zjsb_layout = \"lines\" with min_font_size 17; five rows may not fit",
+        ]
+    );
+}
+
+#[test]
+fn segments_layout_warns_about_none_of_it() {
+    let config = from_toml(
+        "word_wrap = true\nzjsb_counts_template = \"1\\n2\\n3\\n4\\n5\\n6\"\nzjsb_more_template = \"{hidden}\\n{color}\"\nmin_font_size = 20\n",
+    );
+    assert!(config.warnings.is_empty(), "{:?}", config.warnings);
 }
