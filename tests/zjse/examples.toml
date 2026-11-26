@@ -1,5 +1,5 @@
 # The 29 preview examples: which document scenario and which renderer keys.
-# Used by tests/zjsb_golden.rs and preview.sh.
+# Used by tests/zjse_golden.rs and preview.sh.
 #
 # `scenario` names a document in scenarios/<name>.json. Every other key is a
 # renderer key (§4.3 of zj-strip-bridge-data-only-spec.md); missing keys take
@@ -39,128 +39,128 @@ scenario = "hostile"
 [[example]]
 name = "default-compact-mixed"
 scenario = "mixed"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
+zjse_mode = "compact"
+zjse_slot = "dial1"
 
 [[example]]
 name = "default-compact-agents"
 scenario = "agents"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
+zjse_mode = "compact"
+zjse_slot = "dial1"
 
 [[example]]
 name = "default-compact-busy"
 scenario = "busy"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
+zjse_mode = "compact"
+zjse_slot = "dial1"
 
 [[example]]
 name = "default-compact-one-blocked"
 scenario = "one-blocked"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
+zjse_mode = "compact"
+zjse_slot = "dial1"
 
 [[example]]
 name = "default-compact-tasks"
 scenario = "tasks"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
+zjse_mode = "compact"
+zjse_slot = "dial1"
 
 [[example]]
 name = "default-compact-idle"
 scenario = "idle"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
+zjse_mode = "compact"
+zjse_slot = "dial1"
 
 # ---- Custom templates: the strip ----
 [[example]]
 name = "idle-text"
 scenario = "idle"
-zjsb_idle_template = "[c=grey]all quiet[/c]\n{total} active"
+zjse_idle_template = "[c=grey]all quiet[/c]\n{total} active"
 
 [[example]]
 name = "tasks"
 scenario = "tasks"
-zjsb_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{state_label}[/c]\n{tasks|progress_pct|msg:22}"
+zjse_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{state_label}[/c]\n{tasks|progress_pct|msg:22}"
 
 [[example]]
 name = "age"
 scenario = "agents"
-zjsb_entry_template = "[b]{app|title:14}[/b] [c=grey]{age}[/c]\n[c={color}]{state_label}[/c]\n{msg:22}"
+zjse_entry_template = "[b]{app|title:14}[/b] [c=grey]{age}[/c]\n[c={color}]{state_label}[/c]\n{msg:22}"
 
 [[example]]
 name = "custom-layout"
 scenario = "mixed"
-zjsb_counts_template = "[b]{total}[/b] active\n[c={needs_you_color}]{needs_you} need you[/c]\n[c={failed_color}]{failed} failed[/c]"
-zjsb_entry_template = "{marker} [b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]{msg:24}[/c]"
+zjse_counts_template = "[b]{total}[/b] active\n[c={needs_you_color}]{needs_you} need you[/c]\n[c={failed_color}]{failed} failed[/c]"
+zjse_entry_template = "{marker} [b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]{msg:24}[/c]"
 
 [[example]]
 name = "message-first"
 scenario = "agents"
-zjsb_entry_template = "{msg:20}\n[c={color}]{state_label}[/c]\n[c=grey]{app|title}[/c]"
+zjse_entry_template = "{msg:20}\n[c={color}]{state_label}[/c]\n[c=grey]{app|title}[/c]"
 
 [[example]]
 name = "big-marker"
 scenario = "mixed"
-zjsb_entry_template = "[s=2.4][c={color}]{marker}[/c][/s]\n[b]{app|title:12}[/b]"
-zjsb_counts_template = "[s=1.6][c={needs_you_color}]● {needs_you}[/c][/s]\n[s=1.6][c={failed_color}]✗ {failed}[/c][/s]"
+zjse_entry_template = "[s=2.4][c={color}]{marker}[/c][/s]\n[b]{app|title:12}[/b]"
+zjse_counts_template = "[s=1.6][c={needs_you_color}]● {needs_you}[/c][/s]\n[s=1.6][c={failed_color}]✗ {failed}[/c][/s]"
 
 [[example]]
 name = "progress"
 scenario = "agents"
-zjsb_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{progress_pct|state_label}[/c]\n[c=grey]{msg:22}[/c]"
+zjse_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{progress_pct|state_label}[/c]\n[c=grey]{msg:22}[/c]"
 
 [[example]]
 name = "kind"
 scenario = "mixed"
-zjsb_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{state}[/c] [c=grey]{kind}[/c]\n{msg:22}"
+zjse_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{state}[/c] [c=grey]{kind}[/c]\n{msg:22}"
 
 [[example]]
 name = "where"
 scenario = "mixed"
-zjsb_entry_template = "[b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]tab {tab} pane {pane} {age}[/c]"
+zjse_entry_template = "[b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]tab {tab} pane {pane} {age}[/c]"
 
 [[example]]
 name = "more-segment"
 scenario = "busy"
-zjsb_more_template = "[s=1.6][c={color}]{marker}[/c][/s] [b]+{hidden}[/b]\n[c={color}]{state_label}[/c]"
+zjse_more_template = "[s=1.6][c={color}]{marker}[/c][/s] [b]+{hidden}[/b]\n[c={color}]{state_label}[/c]"
 
 # ---- The lines layout ----
 [[example]]
 name = "lines-agents"
 scenario = "agents"
-zjsb_layout = "lines"
+zjse_layout = "lines"
 
 [[example]]
 name = "lines-busy"
 scenario = "busy"
-zjsb_layout = "lines"
+zjse_layout = "lines"
 
 # ---- Custom templates: one slot (compact) ----
 [[example]]
 name = "compact-custom"
 scenario = "agents"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
-zjsb_compact_template = "{marker} {count} [c=grey]{age}[/c]\n[b]{app|title:10}[/b]\n{state_label}"
+zjse_mode = "compact"
+zjse_slot = "dial1"
+zjse_compact_template = "{marker} {count} [c=grey]{age}[/c]\n[b]{app|title:10}[/b]\n{state_label}"
 
 [[example]]
 name = "compact-ratio"
 scenario = "mixed"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
-zjsb_compact_template = "[s=1.8][c={color}]{needs_you}/{total}[/c][/s]\n{state_label}"
+zjse_mode = "compact"
+zjse_slot = "dial1"
+zjse_compact_template = "[s=1.8][c={color}]{needs_you}/{total}[/c][/s]\n{state_label}"
 
 [[example]]
 name = "compact-message"
 scenario = "agents"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
-zjsb_compact_template = "[c={color}]{marker}[/c] [b]{app|title:8}[/b]\n{msg:14}"
+zjse_mode = "compact"
+zjse_slot = "dial1"
+zjse_compact_template = "[c={color}]{marker}[/c] [b]{app|title:8}[/b]\n{msg:14}"
 
 [[example]]
 name = "compact-idle"
 scenario = "idle"
-zjsb_mode = "compact"
-zjsb_slot = "dial1"
-zjsb_idle_template = "[c=grey]quiet[/c]"
+zjse_mode = "compact"
+zjse_slot = "dial1"
+zjse_idle_template = "[c=grey]quiet[/c]"

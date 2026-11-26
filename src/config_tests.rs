@@ -90,9 +90,9 @@ fn every_key_loads_from_the_file_and_the_environment() {
                 "strip_mode" => "raw",
                 "align" => "right",
                 "valign" => "top",
-                "zjsb_mode" => "compact",
-                "zjsb_slot" => "key2_3",
-                "zjsb_layout" => "lines",
+                "zjse_mode" => "compact",
+                "zjse_slot" => "key2_3",
+                "zjse_layout" => "lines",
                 _ => unreachable!(),
             }
             .to_owned(),
@@ -115,9 +115,9 @@ fn every_key_loads_from_the_file_and_the_environment() {
         .iter()
         .map(|(k, v)| (k.to_str().unwrap(), v.to_str().unwrap()))
         .collect::<Vec<_>>());
-    // `zjsb_mode = "compact"` with `zjsb_layout = "lines"`: only the layout
+    // `zjse_mode = "compact"` with `zjse_layout = "lines"`: only the layout
     // warning, the others are about a strip that does not exist (D2).
-    let ignored = "zjsb_layout = \"lines\" with zjsb_mode = \"compact\"; the layout is ignored";
+    let ignored = "zjse_layout = \"lines\" with zjse_mode = \"compact\"; the layout is ignored";
     assert_eq!(by_file.warnings, [ignored]);
     assert_eq!(by_env.warnings, [ignored]);
     for key in KEYS {
@@ -199,7 +199,7 @@ fn unreadable_file_is_reported() {
 #[test]
 fn clamps_say_what_they_did() {
     let config = from_toml(
-        "min_font_size = 1\nline_height = 0.5\npadding_horizontal = -1\npadding_vertical = -1\nstrip_gap = 50\nmax_jpeg_bytes = 100\nredraw_hz = 0\nwatch_timeout_secs = 0\nzjsb_min_interval_ms = 0\n",
+        "min_font_size = 1\nline_height = 0.5\npadding_horizontal = -1\npadding_vertical = -1\nstrip_gap = 50\nmax_jpeg_bytes = 100\nredraw_hz = 0\nwatch_timeout_secs = 0\nzjse_min_interval_ms = 0\n",
     );
     assert_eq!(
         config.warnings,
@@ -212,7 +212,7 @@ fn clamps_say_what_they_did() {
             format!("{AT}redraw_hz = 0 must be above 0; using 2"),
             format!("{AT}strip_gap = 50 is above 32; using 32"),
             format!("{AT}watch_timeout_secs = 0 must be above 0; using 5"),
-            format!("{AT}zjsb_min_interval_ms = 0 must be above 0; using 1000"),
+            format!("{AT}zjse_min_interval_ms = 0 must be above 0; using 1000"),
         ]
     );
     assert_eq!(config.min_font_size, 4.0);
@@ -223,7 +223,7 @@ fn clamps_say_what_they_did() {
     assert_eq!(config.max_jpeg_bytes, 1000);
     assert_eq!(config.redraw_hz, 2.0);
     assert_eq!(config.watch_timeout_secs, 5);
-    assert_eq!(config.zjsb_min_interval_ms, 1000);
+    assert_eq!(config.zjse_min_interval_ms, 1000);
 }
 
 #[test]
@@ -278,7 +278,7 @@ fn non_finite_numbers_are_refused() {
 #[test]
 fn enums_name_the_accepted_values() {
     let config = from_toml(
-        "strip_mode = \"cont\"\nalign = \"side\"\nvalign = \"up\"\nzjsb_mode = \"wide\"\nzjsb_slot = \"dial9\"\n",
+        "strip_mode = \"cont\"\nalign = \"side\"\nvalign = \"up\"\nzjse_mode = \"wide\"\nzjse_slot = \"dial9\"\n",
     );
     assert_eq!(
         config.warnings,
@@ -288,8 +288,8 @@ fn enums_name_the_accepted_values() {
                 "{AT}strip_mode = \"cont\" is not one of continuous, tiles, raw; using continuous"
             ),
             format!("{AT}valign = \"up\" is not one of top, middle, bottom; using middle"),
-            format!("{AT}zjsb_mode = \"wide\" is not one of strip, compact; using strip"),
-            format!("{AT}zjsb_slot = \"dial9\" is not {SLOTS}; using dial1"),
+            format!("{AT}zjse_mode = \"wide\" is not one of strip, compact; using strip"),
+            format!("{AT}zjse_slot = \"dial9\" is not {SLOTS}; using dial1"),
         ]
     );
     assert_eq!(config.strip_mode(), StripMode::Continuous);
@@ -303,44 +303,44 @@ fn enum_aliases_and_case_stay_accepted() {
 }
 
 #[test]
-fn zjsb_slot_accepts_dials_and_keys() {
+fn zjse_slot_accepts_dials_and_keys() {
     for good in ["dial1", "dial4", "key1_1", "key9_9", "key3_5"] {
-        let config = from_toml(&format!("zjsb_slot = \"{good}\"\n"));
+        let config = from_toml(&format!("zjse_slot = \"{good}\"\n"));
         assert!(config.warnings.is_empty(), "{good}: {:?}", config.warnings);
-        assert_eq!(config.zjsb_slot, good);
+        assert_eq!(config.zjse_slot, good);
     }
     for bad in [
         "dial0", "dial5", "dial", "key0_1", "key1_0", "key10_1", "key1_10", "key1", "key_1", "",
     ] {
-        let config = from_toml(&format!("zjsb_slot = \"{bad}\"\n"));
+        let config = from_toml(&format!("zjse_slot = \"{bad}\"\n"));
         assert_eq!(config.warnings.len(), 1, "{bad}");
-        assert_eq!(config.zjsb_slot, "dial1", "{bad}");
+        assert_eq!(config.zjse_slot, "dial1", "{bad}");
     }
 }
 
 #[test]
-fn zjsb_scalars() {
+fn zjse_scalars() {
     let config = from_toml(
-        "zjsb_mode = \"compact\"\nzjsb_slot = \"dial3\"\nzjsb_blank_when_idle = true\nzjsb_min_interval_ms = 500\n",
+        "zjse_mode = \"compact\"\nzjse_slot = \"dial3\"\nzjse_blank_when_idle = true\nzjse_min_interval_ms = 500\n",
     );
     assert!(config.warnings.is_empty(), "{:?}", config.warnings);
-    assert_eq!(config.zjsb_mode, "compact");
-    assert_eq!(config.zjsb_slot, "dial3");
-    assert!(config.zjsb_blank_when_idle);
-    assert_eq!(config.zjsb_min_interval_ms, 500);
+    assert_eq!(config.zjse_mode, "compact");
+    assert_eq!(config.zjse_slot, "dial3");
+    assert!(config.zjse_blank_when_idle);
+    assert_eq!(config.zjse_min_interval_ms, 500);
 
     let config = from_toml(
-        "zjsb_mode = 1\nzjsb_slot = \"nope\"\nzjsb_blank_when_idle = \"yes\"\nzjsb_min_interval_ms = 2.5\n",
+        "zjse_mode = 1\nzjse_slot = \"nope\"\nzjse_blank_when_idle = \"yes\"\nzjse_min_interval_ms = 2.5\n",
     );
     assert_eq!(
         config.warnings,
         [
             format!(
-                "{AT}zjsb_blank_when_idle = \"yes\" is not a boolean (1/true/yes/on, 0/false/no/off); using false"
+                "{AT}zjse_blank_when_idle = \"yes\" is not a boolean (1/true/yes/on, 0/false/no/off); using false"
             ),
-            format!("{AT}zjsb_min_interval_ms = 2.5 is not a whole number; using 1000"),
-            format!("{AT}zjsb_mode = 1 is not one of strip, compact; using strip"),
-            format!("{AT}zjsb_slot = \"nope\" is not {SLOTS}; using dial1"),
+            format!("{AT}zjse_min_interval_ms = 2.5 is not a whole number; using 1000"),
+            format!("{AT}zjse_mode = 1 is not one of strip, compact; using strip"),
+            format!("{AT}zjse_slot = \"nope\" is not {SLOTS}; using dial1"),
         ]
     );
 }
@@ -348,55 +348,55 @@ fn zjsb_scalars() {
 #[test]
 fn templates_check_their_fields() {
     let config = from_toml(
-        "zjsb_entry_template = \"{app}: {total}\"\nzjsb_counts_template = \"{total}\"\nzjsb_more_template = \"{hidden} {total}\"\nzjsb_compact_template = \"{marker}\"\nzjsb_idle_template = \"\"\n",
+        "zjse_entry_template = \"{app}: {total}\"\nzjse_counts_template = \"{total}\"\nzjse_more_template = \"{hidden} {total}\"\nzjse_compact_template = \"{marker}\"\nzjse_idle_template = \"\"\n",
     );
     assert!(config.warnings.is_empty(), "{:?}", config.warnings);
-    assert_eq!(config.zjsb_idle_template, "");
-    assert_eq!(config.zjsb_more_template, "{hidden} {total}");
+    assert_eq!(config.zjse_idle_template, "");
+    assert_eq!(config.zjse_more_template, "{hidden} {total}");
 
     let defaults = Config::default();
     let config = from_toml(
-        "zjsb_entry_template = \"{bogus}\"\nzjsb_counts_template = \"{app}\"\nzjsb_more_template = \"{app}\"\nzjsb_compact_template = \"{hidden}\"\nzjsb_idle_template = \"{app}\"",
+        "zjse_entry_template = \"{bogus}\"\nzjse_counts_template = \"{app}\"\nzjse_more_template = \"{app}\"\nzjse_compact_template = \"{hidden}\"\nzjse_idle_template = \"{app}\"",
     );
     let known = |fields: &[&str]| fields.join(", ");
     assert_eq!(
         config.warnings,
         [
             format!(
-                "{AT}zjsb_compact_template = \"{{hidden}}\" is not a valid template (unknown field `hidden` (known: {})); using {}",
+                "{AT}zjse_compact_template = \"{{hidden}}\" is not a valid template (unknown field `hidden` (known: {})); using {}",
                 known(ENTRY_AND_COUNTS),
-                defaults.zjsb_compact_template
+                defaults.zjse_compact_template
             ),
             format!(
-                "{AT}zjsb_counts_template = \"{{app}}\" is not a valid template (unknown field `app` (known: {})); using {}",
-                known(crate::zjsb::COUNT_FIELDS),
-                defaults.zjsb_counts_template
+                "{AT}zjse_counts_template = \"{{app}}\" is not a valid template (unknown field `app` (known: {})); using {}",
+                known(crate::zjse::COUNT_FIELDS),
+                defaults.zjse_counts_template
             ),
             format!(
-                "{AT}zjsb_entry_template = \"{{bogus}}\" is not a valid template (unknown field `bogus` (known: {})); using {}",
+                "{AT}zjse_entry_template = \"{{bogus}}\" is not a valid template (unknown field `bogus` (known: {})); using {}",
                 known(ENTRY_AND_COUNTS),
-                defaults.zjsb_entry_template
+                defaults.zjse_entry_template
             ),
             format!(
-                "{AT}zjsb_idle_template = \"{{app}}\" is not a valid template (unknown field `app` (known: {})); using ",
-                known(crate::zjsb::COUNT_FIELDS)
+                "{AT}zjse_idle_template = \"{{app}}\" is not a valid template (unknown field `app` (known: {})); using ",
+                known(crate::zjse::COUNT_FIELDS)
             ),
             format!(
-                "{AT}zjsb_more_template = \"{{app}}\" is not a valid template (unknown field `app` (known: {})); using {}",
+                "{AT}zjse_more_template = \"{{app}}\" is not a valid template (unknown field `app` (known: {})); using {}",
                 known(MORE_AND_COUNTS),
-                defaults.zjsb_more_template
+                defaults.zjse_more_template
             ),
         ]
     );
-    assert_eq!(config.zjsb_entry_template, defaults.zjsb_entry_template);
-    assert_eq!(config.zjsb_idle_template, "");
+    assert_eq!(config.zjse_entry_template, defaults.zjse_entry_template);
+    assert_eq!(config.zjse_idle_template, "");
 
-    let config = from_toml("zjsb_entry_template = \"{title\"\n");
+    let config = from_toml("zjse_entry_template = \"{title\"\n");
     assert_eq!(
         config.warnings,
         [format!(
-            "{AT}zjsb_entry_template = \"{{title\" is not a valid template (unclosed `{{` in `{{title`); using {}",
-            defaults.zjsb_entry_template
+            "{AT}zjse_entry_template = \"{{title\" is not a valid template (unclosed `{{` in `{{title`); using {}",
+            defaults.zjse_entry_template
         )]
     );
 }
@@ -470,7 +470,7 @@ fn env_empty_string() {
         ("OPENDECK_STRIP_ALIGN", ""),
         ("OPENDECK_STRIP_FONT_SANS", "  "),
         ("OPENDECK_STRIP_STRIP_GAP", ""),
-        ("OPENDECK_STRIP_ZJSB_IDLE_TEMPLATE", ""),
+        ("OPENDECK_STRIP_ZJSE_IDLE_TEMPLATE", ""),
     ]);
     assert_eq!(
         config.warnings,
@@ -480,7 +480,7 @@ fn env_empty_string() {
             "OPENDECK_STRIP_STRIP_GAP=\"\" is not a number; using 28",
         ]
     );
-    assert_eq!(config.zjsb_idle_template, "");
+    assert_eq!(config.zjse_idle_template, "");
 }
 
 #[test]
@@ -492,10 +492,10 @@ fn env_clamps_and_enums_name_the_variable() {
             ("OPENDECK_STRIP_MIN_FONT_SIZE", "1"),
             ("OPENDECK_STRIP_REDRAW_HZ", "0"),
             ("OPENDECK_STRIP_STRIP_MODE", "cont"),
-            ("OPENDECK_STRIP_ZJSB_MODE", "wide"),
-            ("OPENDECK_STRIP_ZJSB_SLOT", "dial9"),
-            ("OPENDECK_STRIP_ZJSB_MIN_INTERVAL_MS", "-5"),
-            ("OPENDECK_STRIP_ZJSB_ENTRY_TEMPLATE", "{bogus}"),
+            ("OPENDECK_STRIP_ZJSE_MODE", "wide"),
+            ("OPENDECK_STRIP_ZJSE_SLOT", "dial9"),
+            ("OPENDECK_STRIP_ZJSE_MIN_INTERVAL_MS", "-5"),
+            ("OPENDECK_STRIP_ZJSE_ENTRY_TEMPLATE", "{bogus}"),
         ],
     );
     assert_eq!(
@@ -505,10 +505,10 @@ fn env_clamps_and_enums_name_the_variable() {
             "OPENDECK_STRIP_MIN_FONT_SIZE=\"1\" is below 4; using 4",
             "OPENDECK_STRIP_REDRAW_HZ=\"0\" must be above 0; using 2",
             "OPENDECK_STRIP_STRIP_MODE=\"cont\" is not one of continuous, tiles, raw; using continuous",
-            "OPENDECK_STRIP_ZJSB_MODE=\"wide\" is not one of strip, compact; using strip",
-            "OPENDECK_STRIP_ZJSB_SLOT=\"dial9\" is not one of dial1, dial2, dial3, dial4, key<row>_<col> with row and col 1 to 9; using dial1",
-            "OPENDECK_STRIP_ZJSB_MIN_INTERVAL_MS=\"-5\" must be above 0; using 1000",
-            "OPENDECK_STRIP_ZJSB_ENTRY_TEMPLATE=\"{bogus}\" is not a valid template (unknown field `bogus` (known: app, title, state, state_label, kind, msg, progress_pct, tasks, marker, color, count, tab, pane, age, session, tab_name, needs_you, failed, done, working, total, needs_you_color, failed_color, done_color, working_color)); using [b]{app|title:14}[/b]\\n[c={color}]{state_label}[/c]\\n{progress_pct|msg:22}",
+            "OPENDECK_STRIP_ZJSE_MODE=\"wide\" is not one of strip, compact; using strip",
+            "OPENDECK_STRIP_ZJSE_SLOT=\"dial9\" is not one of dial1, dial2, dial3, dial4, key<row>_<col> with row and col 1 to 9; using dial1",
+            "OPENDECK_STRIP_ZJSE_MIN_INTERVAL_MS=\"-5\" must be above 0; using 1000",
+            "OPENDECK_STRIP_ZJSE_ENTRY_TEMPLATE=\"{bogus}\" is not a valid template (unknown field `bogus` (known: app, title, state, state_label, kind, msg, progress_pct, tasks, marker, color, count, tab, pane, age, session, tab_name, needs_you, failed, done, working, total, needs_you_color, failed_color, done_color, working_color)); using [b]{app|title:14}[/b]\\n[c={color}]{state_label}[/c]\\n{progress_pct|msg:22}",
         ]
     );
     assert_eq!(config.strip_gap, 32);
@@ -554,12 +554,12 @@ fn the_example_config_is_valid_and_keeps_the_default_templates() {
     );
     assert!(config.warnings.is_empty(), "{:?}", config.warnings);
     assert!(config.follow);
-    assert_eq!(config.zjsb_mode, "strip");
+    assert_eq!(config.zjse_mode, "strip");
     // Real newlines in the TOML strings parse to the same templates as the
     // defaults, which use a literal `\n`.
     assert_eq!(
-        crate::zjsb::Options::from_config(&config),
-        crate::zjsb::Options::default()
+        crate::zjse::Options::from_config(&config),
+        crate::zjse::Options::default()
     );
 }
 
@@ -567,20 +567,20 @@ fn the_example_config_is_valid_and_keeps_the_default_templates() {
 fn layout_and_gap_keys_load_from_the_file_and_the_environment() {
     let defaults = Config::default();
     assert_eq!(defaults.column_gap, 2);
-    assert_eq!(defaults.zjsb_layout, "segments");
+    assert_eq!(defaults.zjse_layout, "segments");
 
-    let config = from_toml("column_gap = 4\nzjsb_layout = \"lines\"\n");
+    let config = from_toml("column_gap = 4\nzjse_layout = \"lines\"\n");
     assert!(config.warnings.is_empty(), "{:?}", config.warnings);
     assert_eq!(config.column_gap, 4);
-    assert_eq!(config.zjsb_layout, "lines");
+    assert_eq!(config.zjse_layout, "lines");
 
     let config = env(&[
         ("OPENDECK_STRIP_COLUMN_GAP", "3"),
-        ("OPENDECK_STRIP_ZJSB_LAYOUT", "lines"),
+        ("OPENDECK_STRIP_ZJSE_LAYOUT", "lines"),
     ]);
     assert!(config.warnings.is_empty(), "{:?}", config.warnings);
     assert_eq!(config.column_gap, 3);
-    assert_eq!(config.zjsb_layout, "lines");
+    assert_eq!(config.zjse_layout, "lines");
 }
 
 #[test]
@@ -606,26 +606,26 @@ fn column_gap_is_a_whole_number_from_0_to_16() {
 
 #[test]
 fn bad_layout_keeps_segments() {
-    let config = from_toml("zjsb_layout = \"grid\"\n");
+    let config = from_toml("zjse_layout = \"grid\"\n");
     assert_eq!(
         config.warnings,
         [format!(
-            "{AT}zjsb_layout = \"grid\" is not one of segments, lines; using segments"
+            "{AT}zjse_layout = \"grid\" is not one of segments, lines; using segments"
         )]
     );
-    assert_eq!(config.zjsb_layout, "segments");
+    assert_eq!(config.zjse_layout, "segments");
 }
 
 #[test]
 fn lines_layout_warns_about_each_obstacle_alone() {
-    let lines = |text: &str| from_toml(&format!("zjsb_layout = \"lines\"\n{text}"));
+    let lines = |text: &str| from_toml(&format!("zjse_layout = \"lines\"\n{text}"));
 
     assert!(lines("").warnings.is_empty(), "the defaults are fine");
     // D2: compact mode logs only the layout warning.
-    let config = lines("zjsb_mode = \"compact\"\nword_wrap = true\nmin_font_size = 20\n");
+    let config = lines("zjse_mode = \"compact\"\nword_wrap = true\nmin_font_size = 20\n");
     assert_eq!(
         config.warnings,
-        ["zjsb_layout = \"lines\" with zjsb_mode = \"compact\"; the layout is ignored"]
+        ["zjse_layout = \"lines\" with zjse_mode = \"compact\"; the layout is ignored"]
     );
     assert!(
         config.word_wrap && config.min_font_size == 20.0,
@@ -635,33 +635,33 @@ fn lines_layout_warns_about_each_obstacle_alone() {
     let config = lines("word_wrap = true\n");
     assert_eq!(
         config.warnings,
-        ["zjsb_layout = \"lines\" with word_wrap = true; no columns"]
+        ["zjse_layout = \"lines\" with word_wrap = true; no columns"]
     );
 
-    let config = lines("zjsb_counts_template = \"1\\n2\\n3\\n4\\n5\\n6\"\n");
+    let config = lines("zjse_counts_template = \"1\\n2\\n3\\n4\\n5\\n6\"\n");
     assert_eq!(
         config.warnings,
-        ["zjsb_layout = \"lines\" with a zjsb_counts_template of 6 lines; the first 5 are used"]
+        ["zjse_layout = \"lines\" with a zjse_counts_template of 6 lines; the first 5 are used"]
     );
     assert!(
-        lines("zjsb_counts_template = \"1\\n2\\n3\\n4\\n5\"\n")
+        lines("zjse_counts_template = \"1\\n2\\n3\\n4\\n5\"\n")
             .warnings
             .is_empty(),
         "five counts lines fit"
     );
 
-    let config = lines("zjsb_more_template = \"{hidden}\\n{color}\"\n");
+    let config = lines("zjse_more_template = \"{hidden}\\n{color}\"\n");
     assert_eq!(
         config.warnings,
         [
-            "zjsb_layout = \"lines\" with 2 zjsb_more_template lines and 3 zjsb_entry_template lines; the more row will not align"
+            "zjse_layout = \"lines\" with 2 zjse_more_template lines and 3 zjse_entry_template lines; the more row will not align"
         ]
     );
-    let config = lines("zjsb_entry_template = \"{app}\\n{state}\"\n");
+    let config = lines("zjse_entry_template = \"{app}\\n{state}\"\n");
     assert_eq!(
         config.warnings,
         [
-            "zjsb_layout = \"lines\" with 3 zjsb_more_template lines and 2 zjsb_entry_template lines; the more row will not align"
+            "zjse_layout = \"lines\" with 3 zjse_more_template lines and 2 zjse_entry_template lines; the more row will not align"
         ]
     );
 
@@ -671,7 +671,7 @@ fn lines_layout_warns_about_each_obstacle_alone() {
     assert_eq!(
         config.warnings,
         [
-            "zjsb_layout = \"lines\" with min_font_size 17; five rows may not fit and the +N more row is lost first"
+            "zjse_layout = \"lines\" with min_font_size 17; five rows may not fit and the +N more row is lost first"
         ]
     );
 }
@@ -679,15 +679,15 @@ fn lines_layout_warns_about_each_obstacle_alone() {
 #[test]
 fn lines_layout_warnings_keep_the_design_order() {
     let config = from_toml(
-        "zjsb_layout = \"lines\"\nword_wrap = true\nzjsb_counts_template = \"1\\n2\\n3\\n4\\n5\\n6\"\nzjsb_more_template = \"{hidden}\\n{color}\"\nmin_font_size = 17\n",
+        "zjse_layout = \"lines\"\nword_wrap = true\nzjse_counts_template = \"1\\n2\\n3\\n4\\n5\\n6\"\nzjse_more_template = \"{hidden}\\n{color}\"\nmin_font_size = 17\n",
     );
     assert_eq!(
         config.warnings,
         [
-            "zjsb_layout = \"lines\" with word_wrap = true; no columns",
-            "zjsb_layout = \"lines\" with a zjsb_counts_template of 6 lines; the first 5 are used",
-            "zjsb_layout = \"lines\" with 2 zjsb_more_template lines and 3 zjsb_entry_template lines; the more row will not align",
-            "zjsb_layout = \"lines\" with min_font_size 17; five rows may not fit and the +N more row is lost first",
+            "zjse_layout = \"lines\" with word_wrap = true; no columns",
+            "zjse_layout = \"lines\" with a zjse_counts_template of 6 lines; the first 5 are used",
+            "zjse_layout = \"lines\" with 2 zjse_more_template lines and 3 zjse_entry_template lines; the more row will not align",
+            "zjse_layout = \"lines\" with min_font_size 17; five rows may not fit and the +N more row is lost first",
         ]
     );
 }
@@ -695,7 +695,7 @@ fn lines_layout_warnings_keep_the_design_order() {
 #[test]
 fn segments_layout_warns_about_none_of_it() {
     let config = from_toml(
-        "word_wrap = true\nzjsb_counts_template = \"1\\n2\\n3\\n4\\n5\\n6\"\nzjsb_more_template = \"{hidden}\\n{color}\"\nmin_font_size = 20\n",
+        "word_wrap = true\nzjse_counts_template = \"1\\n2\\n3\\n4\\n5\\n6\"\nzjse_more_template = \"{hidden}\\n{color}\"\nmin_font_size = 20\n",
     );
     assert!(config.warnings.is_empty(), "{:?}", config.warnings);
 }

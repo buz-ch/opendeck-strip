@@ -1,7 +1,7 @@
 //! Prints the strip string of one named preview example:
-//! `cargo run --example zjsb_preview -- <example-name>`
+//! `cargo run --example zjse_preview -- <example-name>`
 //! (`-- --config <name>` prints the example's keys as TOML lines instead).
-use opendeck_strip::zjsb::{Mode, Options, examples, render};
+use opendeck_strip::zjse::{Mode, Options, examples, render};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -9,7 +9,7 @@ fn main() {
         [flag, name] if flag == "--config" => (true, name),
         [name] => (false, name),
         _ => {
-            eprintln!("usage: zjsb_preview [--config] <example-name>");
+            eprintln!("usage: zjse_preview [--config] <example-name>");
             std::process::exit(2);
         }
     };
@@ -31,7 +31,7 @@ fn main() {
     match run() {
         Ok(out) => print!("{out}"),
         Err(e) => {
-            eprintln!("zjsb_preview: {e}");
+            eprintln!("zjse_preview: {e}");
             std::process::exit(1);
         }
     }

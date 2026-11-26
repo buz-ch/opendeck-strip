@@ -59,7 +59,7 @@ enum Commands {
         #[arg(allow_hyphen_values = true)]
         slots: Vec<String>,
     },
-    /// Apply a zj-strip-bridge stream from stdin
+    /// Apply a zj-status-export stream from stdin
     #[command(name = "apply-zellij")]
     Apply {
         /// Clear the owned slots if no line arrives for this many seconds
@@ -69,7 +69,7 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = View::State)]
         view: View,
     },
-    /// Follow the zj-strip-bridge stream of a Zellij session and apply it
+    /// Follow the zj-status-export stream of a Zellij session and apply it
     #[command(name = "follow-zellij")]
     Follow {
         /// Zellij session; default: $ZELLIJ_SESSION_NAME if live, else the first live one

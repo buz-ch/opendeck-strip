@@ -1,13 +1,13 @@
 //! Golden parity with the plugin's renderer (spec §9.1): every example of
-//! `tests/zjsb/examples.toml`, rendered from its document through the config
-//! keys, must equal `tests/zjsb/expected/<name>.txt` byte for byte.
+//! `tests/zjse/examples.toml`, rendered from its document through the config
+//! keys, must equal `tests/zjse/expected/<name>.txt` byte for byte.
 use std::path::PathBuf;
 
 use opendeck_strip::config::Config;
-use opendeck_strip::zjsb::{Options, examples, render};
+use opendeck_strip::zjse::{Options, examples, render};
 
 fn expected_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/zjsb/expected")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/zjse/expected")
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn every_example_matches_the_plugin_output() {
         let path = expected_dir().join(format!("{}.txt", e.name));
         let want = std::fs::read_to_string(&path)
             .unwrap_or_else(|err| panic!("{}: {err}", path.display()));
-        // `Config::default()` with the example's `zjsb_*` overrides.
+        // `Config::default()` with the example's `zjse_*` overrides.
         let config: Config = e.config().expect("example config");
         let o = Options::from_config(&config);
         let doc = e.document().expect("scenario document");

@@ -1,4 +1,4 @@
-//! The writer: a `zjsb` state document in, status-file writes out.
+//! The writer: a `zjse` state document in, status-file writes out.
 //!
 //! [`Writer`] holds the throttle, unchanged-text suppression and the owned
 //! slots, with the clock passed in so it is testable. [`StateHandler`] and
@@ -15,7 +15,7 @@ use crate::cli::{self, OnGap};
 use crate::config::Config;
 use crate::frame::{self, ParseError};
 use crate::status::{self, Status};
-use crate::zjsb::{
+use crate::zjse::{
     self,
     document::{Document, Record},
 };
@@ -165,7 +165,7 @@ enum Shown {
 
 /// Owned slots, throttle, unchanged suppression and `strip_mode = raw`.
 pub struct Writer {
-    options: zjsb::Options,
+    options: zjse::Options,
     strip: bool,
     slot: String,
     owned: Vec<String>,
@@ -179,8 +179,8 @@ pub struct Writer {
 
 impl Writer {
     pub fn new(config: &Config) -> Self {
-        let options = zjsb::Options::from_config(config);
-        let strip = options.mode == zjsb::Mode::Strip;
+        let options = zjse::Options::from_config(config);
+        let strip = options.mode == zjse::Mode::Strip;
         let (slot, owned) = if strip {
             let mut owned = vec!["strip".to_owned()];
             owned.extend((1..=4).map(|n| format!("dial{n}")));
@@ -194,7 +194,7 @@ impl Writer {
             strip,
             slot,
             owned,
-            interval: Duration::from_millis(config.zjsb_min_interval_ms),
+            interval: Duration::from_millis(config.zjse_min_interval_ms),
             shown: Shown::Unknown,
             // Compact never writes the strip, so it never announces raw mode.
             raw_set: !strip,
@@ -236,7 +236,7 @@ impl Writer {
             log::debug!("document is not synced; keeping the current deck");
             return;
         }
-        let next = match zjsb::render(doc, &self.options, now_ms) {
+        let next = match zjse::render(doc, &self.options, now_ms) {
             Some(text)
                 if matches!(&self.shown, Shown::Text(shown) if *shown == text) && self.raw_set =>
             {

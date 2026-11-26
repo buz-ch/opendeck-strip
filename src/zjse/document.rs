@@ -1,4 +1,4 @@
-//! Serde types of the version 2 document (`zjsb.get`, or the `doc` of a
+//! Serde types of the version 2 document (`zj-status-export.get`, or the `doc` of a
 //! `state` line). Unknown fields are ignored, so a newer plugin can add some.
 use serde::Deserialize;
 

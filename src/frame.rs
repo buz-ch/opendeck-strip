@@ -1,4 +1,4 @@
-//! Deck frames from `zj-strip-bridge` over `zellij pipe --name zjsb.follow -a view=deck`.
+//! Deck frames from `zj-status-export` over `zellij pipe --name zj-status-export.follow -a view=deck`.
 //!
 //! One line is one JSON object. Every object carries `v` and `type`; `seq` increases
 //! by one per line of a stream. A `deck` frame is a delta unless `full` is set.
@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn non_deck_lines_are_ignored() {
         for line in [
-            r#"{"v":1,"type":"hello","plugin":"zj-strip-bridge","session":"work","view":"deck","seq":0}"#,
+            r#"{"v":1,"type":"hello","plugin":"zj-status-export","session":"work","view":"deck","seq":0}"#,
             r#"{"v":1,"type":"ping","seq":4}"#,
             r#"{"v":1,"type":"state","seq":3,"doc":{}}"#,
             r#"{"v":1,"type":"something_new"}"#,

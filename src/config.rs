@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use crate::render::layout::{Align, VAlign};
 use crate::status::StripMode;
-use crate::zjsb::MAX_ROWS;
-use crate::zjsb::template::Template;
+use crate::zjse::MAX_ROWS;
+use crate::zjse::template::Template;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -49,21 +49,21 @@ pub struct Config {
     /// Expect `opendeck-strip follow-zellij` to be running; `doctor` then checks for a live session.
     pub follow: bool,
 
-    /// `strip`: the 4-segment strip. `compact`: one slot (`zjsb_slot`).
-    pub zjsb_mode: String,
+    /// `strip`: the 4-segment strip. `compact`: one slot (`zjse_slot`).
+    pub zjse_mode: String,
     /// `strip` only: `segments` (four segments) or `lines` (one grid).
-    pub zjsb_layout: String,
+    pub zjse_layout: String,
     /// Compact only: `dial1`..`dial4` or `key<row>_<col>`.
-    pub zjsb_slot: String,
+    pub zjse_slot: String,
     /// Clear the deck when nothing is active, instead of the idle text.
-    pub zjsb_blank_when_idle: bool,
+    pub zjse_blank_when_idle: bool,
     /// Minimum time between two writes when following.
-    pub zjsb_min_interval_ms: u64,
-    pub zjsb_entry_template: String,
-    pub zjsb_counts_template: String,
-    pub zjsb_more_template: String,
-    pub zjsb_compact_template: String,
-    pub zjsb_idle_template: String,
+    pub zjse_min_interval_ms: u64,
+    pub zjse_entry_template: String,
+    pub zjse_counts_template: String,
+    pub zjse_more_template: String,
+    pub zjse_compact_template: String,
+    pub zjse_idle_template: String,
 
     /// Everything that was wrong in the file or the environment, one line each;
     /// the key named in the line kept the value the line ends with.
@@ -103,16 +103,16 @@ impl Default for Config {
             raw_socket: None,
             watch_timeout_secs: 5,
             follow: false,
-            zjsb_mode: "strip".to_owned(),
-            zjsb_layout: "segments".to_owned(),
-            zjsb_slot: "dial1".to_owned(),
-            zjsb_blank_when_idle: false,
-            zjsb_min_interval_ms: 1000,
-            zjsb_entry_template: crate::zjsb::DEFAULT_ENTRY.to_owned(),
-            zjsb_counts_template: crate::zjsb::DEFAULT_COUNTS.to_owned(),
-            zjsb_more_template: crate::zjsb::DEFAULT_MORE.to_owned(),
-            zjsb_compact_template: crate::zjsb::DEFAULT_COMPACT.to_owned(),
-            zjsb_idle_template: crate::zjsb::DEFAULT_IDLE.to_owned(),
+            zjse_mode: "strip".to_owned(),
+            zjse_layout: "segments".to_owned(),
+            zjse_slot: "dial1".to_owned(),
+            zjse_blank_when_idle: false,
+            zjse_min_interval_ms: 1000,
+            zjse_entry_template: crate::zjse::DEFAULT_ENTRY.to_owned(),
+            zjse_counts_template: crate::zjse::DEFAULT_COUNTS.to_owned(),
+            zjse_more_template: crate::zjse::DEFAULT_MORE.to_owned(),
+            zjse_compact_template: crate::zjse::DEFAULT_COMPACT.to_owned(),
+            zjse_idle_template: crate::zjse::DEFAULT_IDLE.to_owned(),
             warnings: Vec::new(),
         }
     }
@@ -230,45 +230,45 @@ impl Config {
         self.lines_warnings();
     }
 
-    /// `zjsb_layout = "lines"` works with some settings better than others; no
+    /// `zjse_layout = "lines"` works with some settings better than others; no
     /// value changes, each line names the key, the value and the consequence.
     fn lines_warnings(&mut self) {
-        if self.zjsb_layout != "lines" {
+        if self.zjse_layout != "lines" {
             return;
         }
-        if self.zjsb_mode == "compact" {
+        if self.zjse_mode == "compact" {
             self.warnings.push(
-                "zjsb_layout = \"lines\" with zjsb_mode = \"compact\"; the layout is ignored"
+                "zjse_layout = \"lines\" with zjse_mode = \"compact\"; the layout is ignored"
                     .to_owned(),
             );
             return;
         }
         if self.word_wrap {
             self.warnings
-                .push("zjsb_layout = \"lines\" with word_wrap = true; no columns".to_owned());
+                .push("zjse_layout = \"lines\" with word_wrap = true; no columns".to_owned());
         }
         // A template that does not parse has its own warning; no line count.
         let count = |text: &str, fields: &[&str]| {
             Template::parse(text, fields).ok().map(|t| t.line_count())
         };
-        let counts = count(&self.zjsb_counts_template, crate::zjsb::COUNT_FIELDS);
+        let counts = count(&self.zjse_counts_template, crate::zjse::COUNT_FIELDS);
         if let Some(counts) = counts.filter(|n| *n > MAX_ROWS) {
             self.warnings.push(format!(
-                "zjsb_layout = \"lines\" with a zjsb_counts_template of {counts} lines; the first {MAX_ROWS} are used"
+                "zjse_layout = \"lines\" with a zjse_counts_template of {counts} lines; the first {MAX_ROWS} are used"
             ));
         }
         if let (Some(entry), Some(more)) = (
-            count(&self.zjsb_entry_template, ENTRY_AND_COUNTS),
-            count(&self.zjsb_more_template, MORE_AND_COUNTS),
+            count(&self.zjse_entry_template, ENTRY_AND_COUNTS),
+            count(&self.zjse_more_template, MORE_AND_COUNTS),
         ) && entry != more
         {
             self.warnings.push(format!(
-                "zjsb_layout = \"lines\" with {more} zjsb_more_template lines and {entry} zjsb_entry_template lines; the more row will not align"
+                "zjse_layout = \"lines\" with {more} zjse_more_template lines and {entry} zjse_entry_template lines; the more row will not align"
             ));
         }
         if self.min_font_size > LINES_MAX_MIN_FONT_SIZE {
             self.warnings.push(format!(
-                "zjsb_layout = \"lines\" with min_font_size {}; five rows may not fit and the +N more row is lost first",
+                "zjse_layout = \"lines\" with min_font_size {}; five rows may not fit and the +N more row is lost first",
                 trim_num(self.min_font_size.to_string())
             ));
         }
@@ -564,24 +564,24 @@ key_table! {
     "raw_socket" => raw_socket: Kind::Path,
     "watch_timeout_secs" => watch_timeout_secs: Kind::Num { real: false, min: Limit::Above(0.0), max: None },
     "follow" => follow: Kind::Bool,
-    "zjsb_mode" => zjsb_mode: Kind::Enum("one of strip, compact", is_zjsb_mode),
-    "zjsb_layout" => zjsb_layout: Kind::Enum("one of segments, lines", is_zjsb_layout),
-    "zjsb_slot" => zjsb_slot: Kind::Enum(SLOTS, is_zjsb_slot),
-    "zjsb_blank_when_idle" => zjsb_blank_when_idle: Kind::Bool,
-    "zjsb_min_interval_ms" => zjsb_min_interval_ms: Kind::Num { real: false, min: Limit::Above(0.0), max: None },
-    "zjsb_entry_template" => zjsb_entry_template: Kind::Template(ENTRY_AND_COUNTS),
-    "zjsb_counts_template" => zjsb_counts_template: Kind::Template(crate::zjsb::COUNT_FIELDS),
-    "zjsb_more_template" => zjsb_more_template: Kind::Template(MORE_AND_COUNTS),
-    "zjsb_compact_template" => zjsb_compact_template: Kind::Template(ENTRY_AND_COUNTS),
-    "zjsb_idle_template" => zjsb_idle_template: Kind::Template(crate::zjsb::COUNT_FIELDS),
+    "zjse_mode" => zjse_mode: Kind::Enum("one of strip, compact", is_zjse_mode),
+    "zjse_layout" => zjse_layout: Kind::Enum("one of segments, lines", is_zjse_layout),
+    "zjse_slot" => zjse_slot: Kind::Enum(SLOTS, is_zjse_slot),
+    "zjse_blank_when_idle" => zjse_blank_when_idle: Kind::Bool,
+    "zjse_min_interval_ms" => zjse_min_interval_ms: Kind::Num { real: false, min: Limit::Above(0.0), max: None },
+    "zjse_entry_template" => zjse_entry_template: Kind::Template(ENTRY_AND_COUNTS),
+    "zjse_counts_template" => zjse_counts_template: Kind::Template(crate::zjse::COUNT_FIELDS),
+    "zjse_more_template" => zjse_more_template: Kind::Template(MORE_AND_COUNTS),
+    "zjse_compact_template" => zjse_compact_template: Kind::Template(ENTRY_AND_COUNTS),
+    "zjse_idle_template" => zjse_idle_template: Kind::Template(crate::zjse::COUNT_FIELDS),
 }
 
 static ENTRY_AND_COUNTS: &[&str] = &concat_fields::<
-    { crate::zjsb::ENTRY_FIELDS.len() + crate::zjsb::COUNT_FIELDS.len() },
->(crate::zjsb::ENTRY_FIELDS, crate::zjsb::COUNT_FIELDS);
+    { crate::zjse::ENTRY_FIELDS.len() + crate::zjse::COUNT_FIELDS.len() },
+>(crate::zjse::ENTRY_FIELDS, crate::zjse::COUNT_FIELDS);
 static MORE_AND_COUNTS: &[&str] = &concat_fields::<
-    { crate::zjsb::MORE_FIELDS.len() + crate::zjsb::COUNT_FIELDS.len() },
->(crate::zjsb::MORE_FIELDS, crate::zjsb::COUNT_FIELDS);
+    { crate::zjse::MORE_FIELDS.len() + crate::zjse::COUNT_FIELDS.len() },
+>(crate::zjse::MORE_FIELDS, crate::zjse::COUNT_FIELDS);
 
 /// Two field lists as one.
 const fn concat_fields<const N: usize>(
@@ -611,16 +611,16 @@ fn env_key(name: &str) -> Option<&'static Key> {
         .find(|key| key.name.to_ascii_uppercase() == name)
 }
 
-fn is_zjsb_mode(s: &str) -> bool {
+fn is_zjse_mode(s: &str) -> bool {
     matches!(s, "strip" | "compact")
 }
 
-fn is_zjsb_layout(s: &str) -> bool {
+fn is_zjse_layout(s: &str) -> bool {
     matches!(s, "segments" | "lines")
 }
 
 /// The plugin's `valid_slot`: `dial1`..`dial4` or `key<row>_<col>`, row and col 1..=9.
-fn is_zjsb_slot(s: &str) -> bool {
+fn is_zjse_slot(s: &str) -> bool {
     if let Some(n) = s.strip_prefix("dial") {
         return matches!(n, "1" | "2" | "3" | "4");
     }

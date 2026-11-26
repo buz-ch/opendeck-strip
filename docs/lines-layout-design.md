@@ -11,9 +11,9 @@ gets tab columns for the full-width strip, the layout is selected in
 
 - No columns on keys, dials or `|` segments.
 - No new data model outside the existing version 2 document.
-- No new `zjsb_*_template` keys: the existing templates do the formatting.
+- No new `zjse_*_template` keys: the existing templates do the formatting.
 - No bridge change and no new bridge command or view.
-- `zjsb_mode = "compact"` and `zjsb_layout = "segments"` produce the same
+- `zjse_mode = "compact"` and `zjse_layout = "segments"` produce the same
   strings as today.
 
 ## 1. Renderer: tab cells on the full-width strip
@@ -34,7 +34,7 @@ spaces. Key and dial titles are not touched. A tab-containing single-segment
 strip in `tiles` mode logs a warning, because it was probably meant as a grid.
 
 This covers `set strip`, `raw-string`, `strip-preview`, `watch` writing to the
-strip, a status file edited directly, and the zjsb writer. `text` and `spans`
+strip, a status file edited directly, and the zjse writer. `text` and `spans`
 values both work.
 
 ### Cells and columns
@@ -83,10 +83,10 @@ values both work.
 | Last column slightly too wide at minimum size | last column ellipsized, not dropped |
 | Column 1 alone wider than the strip | other columns dropped, column 1 ellipsized |
 
-## 2. zjsb: `lines` layout
+## 2. zjse: `lines` layout
 
-`zjsb_layout = "segments" | "lines"`, default `segments`. It only applies with
-`zjsb_mode = "strip"`.
+`zjse_layout = "segments" | "lines"`, default `segments`. It only applies with
+`zjse_mode = "strip"`.
 
 In `lines` the output is one full-width segment: rows joined by `\n`, cells by
 `\t` (the same literal escapes `set` accepts), never `|`.
@@ -125,7 +125,7 @@ For these three templates:
   entry columns stay in place. A row without an entry has blank cells after the
   gutter.
 - If the counts template is empty there is no gutter column.
-- The limit applies to zjsb output only. A manual `set strip` with more lines
+- The limit applies to zjse output only. A manual `set strip` with more lines
   shrinks to fit as today.
 
 ### Length limit
@@ -137,7 +137,7 @@ row is never dropped by the budget.
 
 ### Idle and attention off
 
-- A non-empty `zjsb_idle_template` still replaces the whole output. Its lines
+- A non-empty `zjse_idle_template` still replaces the whole output. Its lines
   are rows, cut to five.
 - With an empty idle template and nothing active, the gutter stays and row 1
   gets `[c=#66cc88][b]All clear[/b][/c]` as its first entry cell. The other
@@ -145,7 +145,7 @@ row is never dropped by the budget.
   agents…") are not shown.
 - With an empty counts template as well, the output is that `All clear` line
   alone.
-- `zjsb_blank_when_idle` behaves as today.
+- `zjse_blank_when_idle` behaves as today.
 - `attention_enabled: false` still shows the fixed attention-off text.
 
 An output without any tab (idle replacement, attention off, or one column only)
@@ -160,7 +160,7 @@ strip. If the strip mode is later changed to `tiles`, tabs render as spaces
 
 ### Default shape
 
-With `zjsb_layout = "lines"`, default templates and the `busy` scenario (six
+With `zjse_layout = "lines"`, default templates and the `busy` scenario (six
 entries):
 
 ```text
@@ -191,7 +191,7 @@ An entry template with *n* lines gives *n* entry columns.
 ## 4. Configuration
 
 ```toml
-zjsb_layout = "lines"
+zjse_layout = "lines"
 # column_gap = 2        # spaces between grid columns, whole number, 0 to 16
 ```
 
@@ -202,8 +202,8 @@ monospaced look.
 
 Warnings at config load:
 
-- `zjsb_layout = "lines"` with `word_wrap = true`: no columns.
-- `zjsb_layout = "lines"` with `zjsb_mode = "compact"`: layout ignored.
+- `zjse_layout = "lines"` with `word_wrap = true`: no columns.
+- `zjse_layout = "lines"` with `zjse_mode = "compact"`: layout ignored.
 - `lines`: the counts template has more than five lines.
 - `lines`: the more and entry templates have different line counts, so the
   more row will not align.
@@ -220,10 +220,10 @@ device).
 |---|---|
 | `src/render/layout.rs` | cell split, column measurement, gap, grid auto-fit, grid truncation |
 | `src/render/mod.rs` | decide when a strip is a grid, pass `column_gap` and grid alignment, tiles warning |
-| `src/config.rs` | `column_gap`, `zjsb_layout`, the warnings |
-| `src/zjsb/template.rs` | render a template as cells, keeping empty positions |
-| `src/zjsb/mod.rs` | `lines` output, five-row limit, more row, per-row budget, idle |
-| `src/zjsb/examples.rs` | accept `zjsb_layout` in the example manifest |
+| `src/config.rs` | `column_gap`, `zjse_layout`, the warnings |
+| `src/zjse/template.rs` | render a template as cells, keeping empty positions |
+| `src/zjse/mod.rs` | `lines` output, five-row limit, more row, per-row budget, idle |
+| `src/zjse/examples.rs` | accept `zjse_layout` in the example manifest |
 | `docs/status-format.md` | tab columns and the layout key |
 | `README.md` | configuration table and template semantics |
 | `examples/config.toml` | lines layout example |
@@ -242,7 +242,7 @@ Renderer:
   dropping, column 1 survival.
 - A PNG golden of a grid in `tests/golden/`.
 
-zjsb:
+zjse:
 
 - Rows: counts 0/1/4/6 lines; entries 0/1/4/5/6.
 - Columns: entry template 1/2/3/5 lines; more template line-count mismatch.
@@ -257,6 +257,6 @@ zjsb:
 - Tabs in an unsegmented strip value in `raw` or `continuous` mode used to
   render as four spaces and now make columns. This is a deliberate break and is
   documented. This includes `watch` commands whose output contains tabs.
-- `zjsb_layout` and `column_gap` are additive; `segments` remains the default,
-  so existing zjsb decks are unchanged.
+- `zjse_layout` and `column_gap` are additive; `segments` remains the default,
+  so existing zjse decks are unchanged.
 - The status-file schema does not change.

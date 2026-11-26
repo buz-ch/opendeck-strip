@@ -1,4 +1,4 @@
-//! The `zj-strip-bridge` document consumer: a version 2 document in, the
+//! The `zj-status-export` document consumer: a version 2 document in, the
 //! text of the strip or of one compact slot out.
 //!
 //! The plugin provides data only; this module owns the presentation: the
@@ -13,16 +13,16 @@ use crate::config::Config;
 use document::Document;
 use template::{Ctx, Template};
 
-/// Default `zjsb_entry_template`.
+/// Default `zjse_entry_template`.
 pub const DEFAULT_ENTRY: &str =
     "[b]{app|title:14}[/b]\\n[c={color}]{state_label}[/c]\\n{progress_pct|msg:22}";
-/// Default `zjsb_counts_template`.
+/// Default `zjse_counts_template`.
 pub const DEFAULT_COUNTS: &str = "[c={needs_you_color}]● {needs_you}[/c]\\n[c={failed_color}]✗ {failed}[/c]\\n[c={done_color}]✓ {done}[/c]\\n[c={working_color}]» {working}[/c]";
-/// Default `zjsb_more_template`.
+/// Default `zjse_more_template`.
 pub const DEFAULT_MORE: &str = "[b]+{hidden} more[/b]\\n[c={color}]{state_label}[/c]\\nsee inbox";
-/// Default `zjsb_compact_template`.
+/// Default `zjse_compact_template`.
 pub const DEFAULT_COMPACT: &str = "[c={color}]{marker} {count}[/c]\\n{app|title:8}";
-/// Default `zjsb_idle_template`: empty, the counts panel plus "All clear".
+/// Default `zjse_idle_template`: empty, the counts panel plus "All clear".
 pub const DEFAULT_IDLE: &str = "";
 /// Segments 2 to 4 of the strip when nothing is active and no idle template
 /// is set; the counts panel stays in segment 1.
@@ -42,7 +42,7 @@ pub const COUNT_FIELDS: &[&str] = &[
     "done_color",
     "working_color",
 ];
-/// Fields of one entry (`zjsb_entry_template`, `zjsb_compact_template`).
+/// Fields of one entry (`zjse_entry_template`, `zjse_compact_template`).
 pub const ENTRY_FIELDS: &[&str] = &[
     "app",
     "title",
@@ -287,27 +287,27 @@ impl Options {
             Template::parse(text, allowed).unwrap_or_else(|_| fallback.clone())
         };
         Self {
-            entry: keep(&c.zjsb_entry_template, &with_counts(ENTRY_FIELDS), &d.entry),
-            counts: keep(&c.zjsb_counts_template, COUNT_FIELDS, &d.counts),
-            more: keep(&c.zjsb_more_template, &with_counts(MORE_FIELDS), &d.more),
+            entry: keep(&c.zjse_entry_template, &with_counts(ENTRY_FIELDS), &d.entry),
+            counts: keep(&c.zjse_counts_template, COUNT_FIELDS, &d.counts),
+            more: keep(&c.zjse_more_template, &with_counts(MORE_FIELDS), &d.more),
             compact: keep(
-                &c.zjsb_compact_template,
+                &c.zjse_compact_template,
                 &with_counts(ENTRY_FIELDS),
                 &d.compact,
             ),
-            idle: keep(&c.zjsb_idle_template, COUNT_FIELDS, &d.idle),
-            mode: if c.zjsb_mode == "compact" {
+            idle: keep(&c.zjse_idle_template, COUNT_FIELDS, &d.idle),
+            mode: if c.zjse_mode == "compact" {
                 Mode::Compact
             } else {
                 Mode::Strip
             },
-            layout: if c.zjsb_layout == "lines" {
+            layout: if c.zjse_layout == "lines" {
                 Layout::Lines
             } else {
                 Layout::Segments
             },
-            slot: (c.zjsb_mode == "compact").then(|| c.zjsb_slot.clone()),
-            blank_when_idle: c.zjsb_blank_when_idle,
+            slot: (c.zjse_mode == "compact").then(|| c.zjse_slot.clone()),
+            blank_when_idle: c.zjse_blank_when_idle,
         }
     }
 }

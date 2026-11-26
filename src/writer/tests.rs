@@ -100,14 +100,14 @@ fn the_latest_held_frame_wins() {
     let mut status = Status::empty();
     let t0 = Instant::now();
     writer.document(&mut status, &doc("a", "blocked", true), 0, t0);
-    let want_b = zjsb::render(
+    let want_b = zjse::render(
         &doc("b", "working", true),
-        &zjsb::Options::from_config(&config),
+        &zjse::Options::from_config(&config),
         0,
     );
-    let want_c = zjsb::render(
+    let want_c = zjse::render(
         &doc("c", "done", true),
-        &zjsb::Options::from_config(&config),
+        &zjse::Options::from_config(&config),
         0,
     );
     writer.document(
@@ -174,8 +174,8 @@ fn raw_mode_is_announced_once() {
 #[test]
 fn compact_mode_owns_only_its_slot() {
     let mut config = config();
-    config.zjsb_mode = "compact".to_owned();
-    config.zjsb_slot = "key1_2".to_owned();
+    config.zjse_mode = "compact".to_owned();
+    config.zjse_slot = "key1_2".to_owned();
     let mut writer = Writer::new(&config);
     let mut status = Status::empty();
 
@@ -190,7 +190,7 @@ fn compact_mode_owns_only_its_slot() {
 #[test]
 fn blank_when_idle_removes_the_owned_slots() {
     let mut config = config();
-    config.zjsb_blank_when_idle = true;
+    config.zjse_blank_when_idle = true;
     let mut writer = Writer::new(&config);
     let mut status = Status::empty();
     status.set_slot("dial2", crate::status::SlotValue::Text("stale".into()));
@@ -213,7 +213,7 @@ fn blank_when_idle_removes_the_owned_slots() {
 #[test]
 fn a_first_idle_document_clears_what_the_owned_slots_held() {
     let mut config = config();
-    config.zjsb_blank_when_idle = true;
+    config.zjse_blank_when_idle = true;
     let mut writer = Writer::new(&config);
     let mut status = Status::empty();
     status.set_slot(
@@ -287,7 +287,7 @@ fn state_lines_without_a_document_are_skipped() {
 #[test]
 fn non_state_lines_are_ignored() {
     for line in [
-        r#"{"v":1,"type":"hello","plugin":"zj-strip-bridge","view":"state","seq":0}"#,
+        r#"{"v":1,"type":"hello","plugin":"zj-status-export","view":"state","seq":0}"#,
         r#"{"v":1,"type":"ping","seq":3}"#,
         r#"{"v":1,"type":"error","message":"boom"}"#,
         r#"{"v":1,"type":"something_new"}"#,
@@ -302,7 +302,7 @@ fn the_hello_log_line_names_the_build() {
     let line = json!({
         "v": 1,
         "type": "hello",
-        "plugin": "zj-strip-bridge",
+        "plugin": "zj-status-export",
         "version": "0.0.1",
         "build": "b6525962f7ae-dirty-20261124-201922",
         "session": "work",
@@ -314,15 +314,15 @@ fn the_hello_log_line_names_the_build() {
     };
     assert_eq!(
         describe_hello(&map),
-        "state stream: plugin zj-strip-bridge version 0.0.1 \
+        "state stream: plugin zj-status-export version 0.0.1 \
          build b6525962f7ae-dirty-20261124-201922 session work view state"
     );
-    let Value::Object(old) = json!({"type": "hello", "plugin": "zj-strip-bridge"}) else {
+    let Value::Object(old) = json!({"type": "hello", "plugin": "zj-status-export"}) else {
         unreachable!("an object");
     };
     assert_eq!(
         describe_hello(&old),
-        "state stream: plugin zj-strip-bridge version ? build ? session ? view ?",
+        "state stream: plugin zj-status-export version ? build ? session ? view ?",
         "a plugin without the field says so"
     );
 }
@@ -400,8 +400,8 @@ fn epoch_ms_is_a_plausible_epoch() {
 #[test]
 fn an_unchanged_compact_frame_is_dropped_too() {
     let mut config = config();
-    config.zjsb_mode = "compact".to_owned();
-    config.zjsb_slot = "key1_2".to_owned();
+    config.zjse_mode = "compact".to_owned();
+    config.zjse_slot = "key1_2".to_owned();
     let mut writer = Writer::new(&config);
     let mut status = Status::empty();
     let t0 = Instant::now();

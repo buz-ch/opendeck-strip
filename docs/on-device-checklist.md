@@ -185,10 +185,10 @@ Local references:
 
 Compare the device with `preview/lines-busy.png` (six panes, four entries plus the more row) and `preview/lines-agents.png` (three panes).
 
-With a running `zj-strip-bridge` deck of six active panes:
+With a running `zj-status-export` deck of six active panes:
 
 ```sh
-OPENDECK_STRIP_ZJSB_LAYOUT=lines opendeck-strip follow-zellij
+OPENDECK_STRIP_ZJSE_LAYOUT=lines opendeck-strip follow-zellij
 ```
 
 The writer sets `strip_mode = "raw"`, so this is the five-row raw case. Check the gutter, the name, state and message columns, the `+N more` row, and whether the smallest row height is readable. Then force the continuous case by hand, because the writer resets the mode to `raw` on every write:
@@ -200,7 +200,7 @@ opendeck-strip set strip '[c=orange]● 2[/c]\t[b]claude[/b]\t[c=orange]needs lo
 
 For a long-message check, put a long value in the last cell of one row. The last column should narrow and end in `…`; if it cannot hold `…`, it is dropped from every row and the cells that lost content end in `…`. Column 1 (the gutter) must stay.
 
-For idle, stop all activity: the four grey counts lines stay as the gutter and row 1 shows `All clear`. The default idle output contains tabs, so it is a grid and left-aligned by the grid rule. With an empty `zjsb_counts_template` the output is `All clear` alone; it has no tab, so it is not a grid and follows the global `align`.
+For idle, stop all activity: the four grey counts lines stay as the gutter and row 1 shows `All clear`. The default idle output contains tabs, so it is a grid and left-aligned by the grid rule. With an empty `zjse_counts_template` the output is `All clear` alone; it has no tab, so it is not a grid and follows the global `align`.
 
 Record: which mode is readable at five rows, whether a row height clips a glyph, whether truncation is obvious, and the idle layout with and without a counts template.
 

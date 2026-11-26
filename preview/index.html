@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>opendeck-strip previews: the zj-strip-bridge strip</title>
+<title>opendeck-strip previews: the zj-status-export strip</title>
 <style>
   :root { --bg: #fff; --fg: #1d2127; --muted: #5b6573; --card: #f4f6f8; --line: #d8dde3; --link: #0b62c4; }
   @media (prefers-color-scheme: dark) {
@@ -35,13 +35,13 @@
 </head>
 <body>
 <main>
-<h1>opendeck-strip previews: the zj-strip-bridge strip</h1>
+<h1>opendeck-strip previews: the zj-status-export strip</h1>
 <p class="lead">What the N4E touch strip shows for each example, rendered by opendeck-strip from the
-zj-strip-bridge status document, without a device (<code>./preview.sh</code>). Each image is the 800x128 raw frame.</p>
+zj-status-export status document, without a device (<code>./preview.sh</code>). Each image is the 800x128 raw frame.</p>
 <nav><a href="#default">Default templates</a> &middot; <a href="#custom">Custom templates</a></nav>
 <div class="legend">
-  <p><span class="badge def">Default</span> built-in templates, <strong>no template settings</strong>. Compact mode only sets <code>zjsb_mode</code> and <code>zjsb_slot</code>.</p>
-  <p><span class="badge cus">Custom</span> one or more <code>zjsb_*_template</code> keys of <code>config.toml</code>, shown in the boxes under the title.</p>
+  <p><span class="badge def">Default</span> built-in templates, <strong>no template settings</strong>. Compact mode only sets <code>zjse_mode</code> and <code>zjse_slot</code>.</p>
+  <p><span class="badge cus">Custom</span> one or more <code>zjse_*_template</code> keys of <code>config.toml</code>, shown in the boxes under the title.</p>
 </div>
 <h2 id="default">Default templates <small>13 examples</small></h2>
 <p class="lead">What you get without any template setting: first the strip, then the one-slot compact mode.</p>
@@ -90,183 +90,183 @@ zj-strip-bridge status document, without a device (<code>./preview.sh</code>). E
 <img src="safe-text.png" width="800" height="128" alt="Untrusted text">
 </section>
 <h4>One slot (compact mode)</h4>
-<p class="lead"><code>zjsb_mode</code> and <code>zjsb_slot</code> are set; the template is the default. The slot is drawn as the first 200 px of the frame; on the device it is the one dial or key you chose. It shows the most urgent state with its count, and the top pane.</p>
+<p class="lead"><code>zjse_mode</code> and <code>zjse_slot</code> are set; the template is the default. The slot is drawn as the first 200 px of the frame; on the device it is the one dial or key you chose. It shows the most urgent state with its count, and the top pane.</p>
 <section id="default-compact-mixed">
 <h3><span class="badge def">Default</span> Mixed</h3>
 <p>Two panes wait for you: the slot shows the orange marker, 2, and the pane that has waited longest.</p>
 <p class="meta">Example <code>default-compact-mixed</code>, scenario <code>mixed</code>, default templates; only the mode and the slot are set</p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
 <img src="default-compact-mixed.png" width="800" height="128" alt="Mixed">
 </section>
 <section id="default-compact-agents">
 <h3><span class="badge def">Default</span> Three agents</h3>
 <p>Claude waits, so the slot shows it.</p>
 <p class="meta">Example <code>default-compact-agents</code>, scenario <code>agents</code>, default templates; only the mode and the slot are set</p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
 <img src="default-compact-agents.png" width="800" height="128" alt="Three agents">
 </section>
 <section id="default-compact-busy">
 <h3><span class="badge def">Default</span> Many panes</h3>
 <p>Only the most urgent pane is named; the count covers all panes in that state.</p>
 <p class="meta">Example <code>default-compact-busy</code>, scenario <code>busy</code>, default templates; only the mode and the slot are set</p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
 <img src="default-compact-busy.png" width="800" height="128" alt="Many panes">
 </section>
 <section id="default-compact-one-blocked">
 <h3><span class="badge def">Default</span> One pane</h3>
 <p>A single blocked pane.</p>
 <p class="meta">Example <code>default-compact-one-blocked</code>, scenario <code>one-blocked</code>, default templates; only the mode and the slot are set</p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
 <img src="default-compact-one-blocked.png" width="800" height="128" alt="One pane">
 </section>
 <section id="default-compact-tasks">
 <h3><span class="badge def">Default</span> Working pane</h3>
 <p>No waiting pane, so the top state is working.</p>
 <p class="meta">Example <code>default-compact-tasks</code>, scenario <code>tasks</code>, default templates; only the mode and the slot are set</p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
 <img src="default-compact-tasks.png" width="800" height="128" alt="Working pane">
 </section>
 <section id="default-compact-idle">
 <h3><span class="badge def">Default</span> Nothing active</h3>
-<p>The slot stays blank (empty idle template). With <code>zjsb_blank_when_idle</code> it is cleared instead.</p>
+<p>The slot stays blank (empty idle template). With <code>zjse_blank_when_idle</code> it is cleared instead.</p>
 <p class="meta">Example <code>default-compact-idle</code>, scenario <code>idle</code>, default templates; only the mode and the slot are set</p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
 <img src="default-compact-idle.png" width="800" height="128" alt="Nothing active">
 </section>
 <h2 id="custom">Custom templates <small>16 examples</small></h2>
-<p class="lead">The same documents laid out with <code>zjsb_entry_template</code>, <code>zjsb_counts_template</code>, <code>zjsb_more_template</code>, <code>zjsb_compact_template</code> and <code>zjsb_idle_template</code>.</p>
+<p class="lead">The same documents laid out with <code>zjse_entry_template</code>, <code>zjse_counts_template</code>, <code>zjse_more_template</code>, <code>zjse_compact_template</code> and <code>zjse_idle_template</code>.</p>
 <h4>Strip</h4>
 <p class="lead">Templates for the touch strip.</p>
 <section id="idle-text">
 <h3><span class="badge cus">Custom</span> Idle text</h3>
-<p><code>zjsb_idle_template</code> replaces the whole output when nothing is active.</p>
+<p><code>zjse_idle_template</code> replaces the whole output when nothing is active.</p>
 <p class="meta">Example <code>idle-text</code>, scenario <code>idle</code></p>
-<pre>zjsb_idle_template = "[c=grey]all quiet[/c]\n{total} active"</pre>
+<pre>zjse_idle_template = "[c=grey]all quiet[/c]\n{total} active"</pre>
 <img src="idle-text.png" width="800" height="128" alt="Idle text">
 </section>
 <section id="tasks">
 <h3><span class="badge cus">Custom</span> Background tasks</h3>
 <p>Child records show up as <code>{tasks}</code>.</p>
 <p class="meta">Example <code>tasks</code>, scenario <code>tasks</code></p>
-<pre>zjsb_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{state_label}[/c]\n{tasks|progress_pct|msg:22}"</pre>
+<pre>zjse_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{state_label}[/c]\n{tasks|progress_pct|msg:22}"</pre>
 <img src="tasks.png" width="800" height="128" alt="Background tasks">
 </section>
 <section id="age">
 <h3><span class="badge cus">Custom</span> Age</h3>
 <p><code>{age}</code> is the time since the pane last reported.</p>
 <p class="meta">Example <code>age</code>, scenario <code>agents</code></p>
-<pre>zjsb_entry_template = "[b]{app|title:14}[/b] [c=grey]{age}[/c]\n[c={color}]{state_label}[/c]\n{msg:22}"</pre>
+<pre>zjse_entry_template = "[b]{app|title:14}[/b] [c=grey]{age}[/c]\n[c={color}]{state_label}[/c]\n{msg:22}"</pre>
 <img src="age.png" width="800" height="128" alt="Age">
 </section>
 <section id="custom-layout">
 <h3><span class="badge cus">Custom</span> Counts and entries re-templated</h3>
 <p>A one-line summary on the left, a marker before each name.</p>
 <p class="meta">Example <code>custom-layout</code>, scenario <code>mixed</code></p>
-<pre>zjsb_counts_template = "[b]{total}[/b] active\n[c={needs_you_color}]{needs_you} need you[/c]\n[c={failed_color}]{failed} failed[/c]"</pre>
-<pre>zjsb_entry_template = "{marker} [b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]{msg:24}[/c]"</pre>
+<pre>zjse_counts_template = "[b]{total}[/b] active\n[c={needs_you_color}]{needs_you} need you[/c]\n[c={failed_color}]{failed} failed[/c]"</pre>
+<pre>zjse_entry_template = "{marker} [b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]{msg:24}[/c]"</pre>
 <img src="custom-layout.png" width="800" height="128" alt="Counts and entries re-templated">
 </section>
 <section id="message-first">
 <h3><span class="badge cus">Custom</span> Message first</h3>
 <p>The request is the headline, the agent a grey caption.</p>
 <p class="meta">Example <code>message-first</code>, scenario <code>agents</code></p>
-<pre>zjsb_entry_template = "{msg:20}\n[c={color}]{state_label}[/c]\n[c=grey]{app|title}[/c]"</pre>
+<pre>zjse_entry_template = "{msg:20}\n[c={color}]{state_label}[/c]\n[c=grey]{app|title}[/c]"</pre>
 <img src="message-first.png" width="800" height="128" alt="Message first">
 </section>
 <section id="big-marker">
 <h3><span class="badge cus">Custom</span> Big marker</h3>
 <p>A large coloured marker and the name. <code>[s=N]</code> scales text between 0.5 and 3.</p>
 <p class="meta">Example <code>big-marker</code>, scenario <code>mixed</code></p>
-<pre>zjsb_counts_template = "[s=1.6][c={needs_you_color}]● {needs_you}[/c][/s]\n[s=1.6][c={failed_color}]✗ {failed}[/c][/s]"</pre>
-<pre>zjsb_entry_template = "[s=2.4][c={color}]{marker}[/c][/s]\n[b]{app|title:12}[/b]"</pre>
+<pre>zjse_counts_template = "[s=1.6][c={needs_you_color}]● {needs_you}[/c][/s]\n[s=1.6][c={failed_color}]✗ {failed}[/c][/s]"</pre>
+<pre>zjse_entry_template = "[s=2.4][c={color}]{marker}[/c][/s]\n[b]{app|title:12}[/b]"</pre>
 <img src="big-marker.png" width="800" height="128" alt="Big marker">
 </section>
 <section id="progress">
 <h3><span class="badge cus">Custom</span> Progress first</h3>
 <p>Working panes show their percentage, others their state.</p>
 <p class="meta">Example <code>progress</code>, scenario <code>agents</code></p>
-<pre>zjsb_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{progress_pct|state_label}[/c]\n[c=grey]{msg:22}[/c]"</pre>
+<pre>zjse_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{progress_pct|state_label}[/c]\n[c=grey]{msg:22}[/c]"</pre>
 <img src="progress.png" width="800" height="128" alt="Progress first">
 </section>
 <section id="kind">
 <h3><span class="badge cus">Custom</span> State and kind</h3>
 <p>The raw protocol values, <code>{state}</code> and <code>{kind}</code>, for people who want them.</p>
 <p class="meta">Example <code>kind</code>, scenario <code>mixed</code></p>
-<pre>zjsb_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{state}[/c] [c=grey]{kind}[/c]\n{msg:22}"</pre>
+<pre>zjse_entry_template = "[b]{app|title:14}[/b]\n[c={color}]{state}[/c] [c=grey]{kind}[/c]\n{msg:22}"</pre>
 <img src="kind.png" width="800" height="128" alt="State and kind">
 </section>
 <section id="where">
 <h3><span class="badge cus">Custom</span> Where is it?</h3>
 <p>Tab and pane ids, to find the pane that needs you.</p>
 <p class="meta">Example <code>where</code>, scenario <code>mixed</code></p>
-<pre>zjsb_entry_template = "[b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]tab {tab} pane {pane} {age}[/c]"</pre>
+<pre>zjse_entry_template = "[b]{app|title:12}[/b]\n[c={color}]{state_label}[/c]\n[c=grey]tab {tab} pane {pane} {age}[/c]"</pre>
 <img src="where.png" width="800" height="128" alt="Where is it?">
 </section>
 <section id="more-segment">
 <h3><span class="badge cus">Custom</span> The +N more segment</h3>
-<p><code>zjsb_more_template</code>, here with the marker and the number of hidden panes.</p>
+<p><code>zjse_more_template</code>, here with the marker and the number of hidden panes.</p>
 <p class="meta">Example <code>more-segment</code>, scenario <code>busy</code></p>
-<pre>zjsb_more_template = "[s=1.6][c={color}]{marker}[/c][/s] [b]+{hidden}[/b]\n[c={color}]{state_label}[/c]"</pre>
+<pre>zjse_more_template = "[s=1.6][c={color}]{marker}[/c][/s] [b]+{hidden}[/b]\n[c={color}]{state_label}[/c]"</pre>
 <img src="more-segment.png" width="800" height="128" alt="The +N more segment">
 </section>
 <h4>The lines layout</h4>
-<p class="lead"><code>zjsb_layout = "lines"</code>: one full-width segment whose rows are tab-separated cells. The counts template is the left gutter, and each entry template line is one column.</p>
+<p class="lead"><code>zjse_layout = "lines"</code>: one full-width segment whose rows are tab-separated cells. The counts template is the left gutter, and each entry template line is one column.</p>
 <section id="lines-agents">
 <h3><span class="badge cus">Custom</span> Three agents on three rows</h3>
 <p>The default templates as a grid: marker and count, name, state, message.</p>
 <p class="meta">Example <code>lines-agents</code>, scenario <code>agents</code></p>
-<pre>zjsb_layout = "lines"</pre>
+<pre>zjse_layout = "lines"</pre>
 <img src="lines-agents.png" width="800" height="128" alt="Three agents on three rows">
 </section>
 <section id="lines-busy">
 <h3><span class="badge cus">Custom</span> Six agents on five rows</h3>
 <p>Five is the limit; the last row folds the hidden panes into the more template.</p>
 <p class="meta">Example <code>lines-busy</code>, scenario <code>busy</code></p>
-<pre>zjsb_layout = "lines"</pre>
+<pre>zjse_layout = "lines"</pre>
 <img src="lines-busy.png" width="800" height="128" alt="Six agents on five rows">
 </section>
 <h4>One slot (compact mode)</h4>
-<p class="lead"><code>zjsb_compact_template</code> and <code>zjsb_idle_template</code>, with the mode and the slot set.</p>
+<p class="lead"><code>zjse_compact_template</code> and <code>zjse_idle_template</code>, with the mode and the slot set.</p>
 <section id="compact-custom">
 <h3><span class="badge cus">Custom</span> Compact with age</h3>
-<p><code>zjsb_compact_template</code> with the age.</p>
+<p><code>zjse_compact_template</code> with the age.</p>
 <p class="meta">Example <code>compact-custom</code>, scenario <code>agents</code></p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
-<pre>zjsb_compact_template = "{marker} {count} [c=grey]{age}[/c]\n[b]{app|title:10}[/b]\n{state_label}"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
+<pre>zjse_compact_template = "{marker} {count} [c=grey]{age}[/c]\n[b]{app|title:10}[/b]\n{state_label}"</pre>
 <img src="compact-custom.png" width="800" height="128" alt="Compact with age">
 </section>
 <section id="compact-ratio">
 <h3><span class="badge cus">Custom</span> Compact: ratio</h3>
 <p>Waiting panes out of all active ones.</p>
 <p class="meta">Example <code>compact-ratio</code>, scenario <code>mixed</code></p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
-<pre>zjsb_compact_template = "[s=1.8][c={color}]{needs_you}/{total}[/c][/s]\n{state_label}"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
+<pre>zjse_compact_template = "[s=1.8][c={color}]{needs_you}/{total}[/c][/s]\n{state_label}"</pre>
 <img src="compact-ratio.png" width="800" height="128" alt="Compact: ratio">
 </section>
 <section id="compact-message">
 <h3><span class="badge cus">Custom</span> Compact: message</h3>
 <p>The request itself in the slot.</p>
 <p class="meta">Example <code>compact-message</code>, scenario <code>agents</code></p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
-<pre>zjsb_compact_template = "[c={color}]{marker}[/c] [b]{app|title:8}[/b]\n{msg:14}"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
+<pre>zjse_compact_template = "[c={color}]{marker}[/c] [b]{app|title:8}[/b]\n{msg:14}"</pre>
 <img src="compact-message.png" width="800" height="128" alt="Compact: message">
 </section>
 <section id="compact-idle">
 <h3><span class="badge cus">Custom</span> Compact: idle text</h3>
 <p>What the slot shows when nothing is active.</p>
 <p class="meta">Example <code>compact-idle</code>, scenario <code>idle</code></p>
-<pre>zjsb_mode = "compact"</pre>
-<pre>zjsb_slot = "dial1"</pre>
-<pre>zjsb_idle_template = "[c=grey]quiet[/c]"</pre>
+<pre>zjse_mode = "compact"</pre>
+<pre>zjse_slot = "dial1"</pre>
+<pre>zjse_idle_template = "[c=grey]quiet[/c]"</pre>
 <img src="compact-idle.png" width="800" height="128" alt="Compact: idle text">
 </section>
 </main>

@@ -731,7 +731,7 @@ where
 }
 
 const FULL_FRAME: &str = concat!(
-    r#"{"v":1,"type":"hello","plugin":"zj-strip-bridge","version":"0.1.0","session":"work","view":"deck","seq":0}"#,
+    r#"{"v":1,"type":"hello","plugin":"zj-status-export","version":"0.1.0","session":"work","view":"deck","seq":0}"#,
     "\n",
     r#"{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"D1"},"settings":{"strip_mode":"tiles","labels":true,"strip_gap":12},"clear":[],"owned":["strip","dial1","dial2","dial3","dial4"]}"#,
     "\n",
@@ -758,11 +758,11 @@ fn apply_applies_a_full_then_incremental_frame() {
 #[test]
 fn apply_zellij_lines_writes_tabs_and_newlines() {
     let env = Env::new();
-    let doc: Value = serde_json::from_str(include_str!("zjsb/scenarios/one-blocked.json")).unwrap();
+    let doc: Value = serde_json::from_str(include_str!("zjse/scenarios/one-blocked.json")).unwrap();
     let line = serde_json::json!({"v": 1, "type": "state", "seq": 1, "doc": doc}).to_string();
     let mut child = env
         .command(["apply-zellij"])
-        .env("OPENDECK_STRIP_ZJSB_LAYOUT", "lines")
+        .env("OPENDECK_STRIP_ZJSE_LAYOUT", "lines")
         .stdin(std::process::Stdio::piped())
         .spawn()
         .expect("spawn apply");
@@ -799,9 +799,9 @@ fn apply_zellij_lines_escapes_a_template_backslash() {
     let env = Env::new();
     fs::write(
         env.path("config.toml"),
-        "zjsb_layout = \"lines\"\n\
-         zjsb_counts_template = \"\"\n\
-         zjsb_entry_template = '{app}\\n x\\{title}\\n{msg}'\n",
+        "zjse_layout = \"lines\"\n\
+         zjse_counts_template = \"\"\n\
+         zjse_entry_template = '{app}\\n x\\{title}\\n{msg}'\n",
     )
     .unwrap();
     let doc = serde_json::json!({
@@ -1095,7 +1095,7 @@ case "$1" in
       exit 1
     fi
     printf '%s\n' \
-      '{"v":1,"type":"hello","plugin":"zj-strip-bridge","version":"0.1.0","session":"work","view":"deck","seq":0}' \
+      '{"v":1,"type":"hello","plugin":"zj-status-export","version":"0.1.0","session":"work","view":"deck","seq":0}' \
       '{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"D1"},"settings":{"strip_mode":"tiles"},"clear":[],"owned":["strip","dial1","dial2","dial3","dial4"]}' \
       '{"v":1,"type":"ping","seq":2}'
     exit 0
@@ -1136,7 +1136,7 @@ fn follow_once_applies_frames_from_a_fake_zellij() {
 fn assert_follow_argv(env: &Env) {
     assert_eq!(
         fs::read_to_string(env.path("argv")).unwrap(),
-        "--session\nwork\npipe\n--name\nzjsb.follow\n-a\nview=deck\nstart\n"
+        "--session\nwork\npipe\n--name\nzj-status-export.follow\n-a\nview=deck\nstart\n"
     );
 }
 

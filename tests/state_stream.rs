@@ -13,9 +13,9 @@ use tempfile::TempDir;
 
 const BIN: &str = env!("CARGO_BIN_EXE_opendeck-strip");
 
-const ONE_BLOCKED: &str = include_str!("zjsb/scenarios/one-blocked.json");
-const IDLE: &str = include_str!("zjsb/scenarios/idle.json");
-const DEFAULT_ONE_BLOCKED: &str = include_str!("zjsb/expected/default-one-blocked.txt");
+const ONE_BLOCKED: &str = include_str!("zjse/scenarios/one-blocked.json");
+const IDLE: &str = include_str!("zjse/scenarios/idle.json");
+const DEFAULT_ONE_BLOCKED: &str = include_str!("zjse/expected/default-one-blocked.txt");
 
 struct Env {
     dir: TempDir,
@@ -78,7 +78,7 @@ fn hello(seq: u64) -> String {
     json!({
         "v": 1,
         "type": "hello",
-        "plugin": "zj-strip-bridge",
+        "plugin": "zj-status-export",
         "version": "0.1.0",
         "session": "work",
         "view": "state",
@@ -179,7 +179,7 @@ fn blank_when_idle_removes_the_strip_and_the_dials() {
     );
     let output = env
         .command(["apply-zellij"])
-        .env("OPENDECK_STRIP_ZJSB_BLANK_WHEN_IDLE", "1")
+        .env("OPENDECK_STRIP_ZJSE_BLANK_WHEN_IDLE", "1")
         .stdin(Stdio::piped())
         .spawn()
         .and_then(|mut child| {
@@ -206,8 +206,8 @@ fn compact_mode_writes_only_the_configured_slot() {
     let input = format!("{}\n{}\n", hello(0), state(1, ONE_BLOCKED));
     let output = env
         .command(["apply-zellij"])
-        .env("OPENDECK_STRIP_ZJSB_MODE", "compact")
-        .env("OPENDECK_STRIP_ZJSB_SLOT", "key1_2")
+        .env("OPENDECK_STRIP_ZJSE_MODE", "compact")
+        .env("OPENDECK_STRIP_ZJSE_SLOT", "key1_2")
         .stdin(Stdio::piped())
         .spawn()
         .and_then(|mut child| {
@@ -258,7 +258,7 @@ fn a_state_gap_is_no_reason_to_reconnect_and_keeps_rendering() {
 fn the_deck_view_still_applies_a_deck_frame() {
     let env = Env::new();
     let input = concat!(
-        r#"{"v":1,"type":"hello","plugin":"zj-strip-bridge","session":"work","view":"deck","seq":0}"#,
+        r#"{"v":1,"type":"hello","plugin":"zj-status-export","session":"work","view":"deck","seq":0}"#,
         "\n",
         r#"{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"D1"},"settings":{"strip_mode":"tiles"},"owned":["strip","dial1","dial2","dial3","dial4"]}"#,
         "\n"

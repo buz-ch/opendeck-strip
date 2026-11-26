@@ -1,4 +1,4 @@
-# Follow the zj-strip-bridge deck and keep the status file current.
+# Follow the zj-status-export deck and keep the status file current.
 #
 # Install as a user unit:
 #   mkdir -p ~/.config/systemd/user
@@ -12,7 +12,7 @@
 # new session. Adjust ExecStart to the installed binary.
 
 [Unit]
-Description=Follow the zj-strip-bridge deck for opendeck-strip
+Description=Follow the zj-status-export deck for opendeck-strip
 After=graphical-session.target
 
 [Service]

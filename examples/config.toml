@@ -3,7 +3,7 @@
 # Every key is optional; a missing key keeps its default. A value this file
 # cannot use is reported by `opendeck-strip doctor` and in the log, and that
 # key keeps its default. Environment overrides: OPENDECK_STRIP_<KEY>
-# (e.g. OPENDECK_STRIP_ZJSB_MODE=compact). Booleans: 1/true/yes/on and
+# (e.g. OPENDECK_STRIP_ZJSE_MODE=compact). Booleans: 1/true/yes/on and
 # 0/false/no/off, in any case. The status file's strip_mode and strip_gap
 # take precedence over this file.
 
@@ -13,58 +13,58 @@
 follow = true
 
 # "strip": the four-segment touch strip. "compact": one dial or key.
-zjsb_mode = "strip"
+zjse_mode = "strip"
 # "segments": counts plus entries across the strip. "lines": one full-width
 # segment, one row per entry, the counts template as the left gutter. Needs
 # strip mode; tabs in the strip value then make columns (raw or continuous).
-# zjsb_layout = "segments"
-# zjsb_slot = "dial1"        # compact only: dial1..dial4 or key<row>_<col>
+# zjse_layout = "segments"
+# zjse_slot = "dial1"        # compact only: dial1..dial4 or key<row>_<col>
 
 # Nothing active: false keeps the counts panel plus "All clear"; true clears
 # the owned slots instead.
-zjsb_blank_when_idle = false
+zjse_blank_when_idle = false
 
 # Minimum time between two writes; the latest state wins.
-zjsb_min_interval_ms = 1000
+zjse_min_interval_ms = 1000
 
 # ---- templates -------------------------------------------------------------
 # Empty lines in a template are ignored. {age} is computed when a document
-# arrives and is not refreshed until the next one. With zjsb_layout = "lines"
+# arrives and is not refreshed until the next one. With zjse_layout = "lines"
 # each line is one cell of a row: the counts lines form the gutter, the entry
 # lines the entry cells, and the more lines the +N more row.
 # Fields: app, title, state, state_label, kind, msg, progress_pct, tasks,
 # marker, color, count, tab, pane, age, session, tab_name, plus the count
 # fields (needs_you, failed, done, working, total and the four *_color).
 
-zjsb_entry_template = """
+zjse_entry_template = """
 [b]{app|title:14}[/b]
 [c={color}]{state_label}[/c]
 {progress_pct|msg:22}"""
 
-zjsb_counts_template = """
+zjse_counts_template = """
 [c={needs_you_color}]● {needs_you}[/c]
 [c={failed_color}]✗ {failed}[/c]
 [c={done_color}]✓ {done}[/c]
 [c={working_color}]» {working}[/c]"""
 
-zjsb_more_template = """
+zjse_more_template = """
 [b]+{hidden} more[/b]
 [c={color}]{state_label}[/c]
 see inbox"""
 
 # Compact mode only.
-# zjsb_compact_template = """
+# zjse_compact_template = """
 # [c={color}]{marker} {count}[/c]
 # {app|title:8}"""
 
 # Empty: the counts panel plus the default "All clear" in strip mode, and
 # nothing in compact mode.
-zjsb_idle_template = ""
+zjse_idle_template = ""
 
 # Compact alternative: one dial or key instead of the strip.
-# zjsb_mode = "compact"
-# zjsb_slot = "dial2"
-# zjsb_compact_template = """
+# zjse_mode = "compact"
+# zjse_slot = "dial2"
+# zjse_compact_template = """
 # [c={color}]{marker} {count}[/c]
 # {app|title:10}
 # {state_label}"""

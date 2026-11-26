@@ -1,9 +1,9 @@
 #!/bin/sh
 # Render the preview images and preview/index.html with opendeck-strip (no device).
-#   ./preview.sh          the 29 examples of tests/zjsb/examples.toml into preview/
+#   ./preview.sh          the 29 examples of tests/zjse/examples.toml into preview/
 #   ./preview.sh NAME     one of them, as preview/adhoc.png
-# Each example names a scenario document (tests/zjsb/scenarios/) and its
-# `zjsb_*` keys; `cargo run --example zjsb_preview -- NAME` renders the strip
+# Each example names a scenario document (tests/zjse/scenarios/) and its
+# `zjse_*` keys; `cargo run --example zjse_preview -- NAME` renders the strip
 # string with this repository's renderer. Images are the 800x128 raw frame
 # (opendeck-strip raw-string --out). Compact output is one slot, so it is shown
 # as the first 200 px segment of an otherwise empty frame.
@@ -15,7 +15,7 @@ CUS=preview/custom.html.tmp
 esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 
 preview() { # example-name: the strip string on stdout
-  cargo run -q --example zjsb_preview -- "$1"
+  cargo run -q --example zjse_preview -- "$1"
 }
 
 render() { # example-name
@@ -40,7 +40,7 @@ example() {
   {
     printf '<section id="%s">\n<h3>%s %s</h3>\n<p>%s</p>\n' "$name" "$badge" "$title" "$desc"
     printf '<p class="meta">Example <code>%s</code>, scenario <code>%s</code>' "$name" "$scen"
-    keys=$(cargo run -q --example zjsb_preview -- --config "$name") || exit 1
+    keys=$(cargo run -q --example zjse_preview -- --config "$name") || exit 1
     if [ "$kind" = default ]; then
       [ -z "$keys" ] && printf ', default templates, no configuration' || printf ', default templates; only the mode and the slot are set'
     fi
@@ -72,17 +72,17 @@ example default default-tasks "One agent with background tasks" "By default the 
 example default default-idle "Nothing active" "The counts panel stays, all grey, and the other segments say that all is clear." idle
 example default safe-text "Untrusted text" "A pane whose name and message contain markup, a segment separator and an escape code. They are shown as plain text and cannot add segments." hostile
 
-subhead default "One slot (compact mode)" "<code>zjsb_mode</code> and <code>zjsb_slot</code> are set; the template is the default. The slot is drawn as the first 200 px of the frame; on the device it is the one dial or key you chose. It shows the most urgent state with its count, and the top pane."
+subhead default "One slot (compact mode)" "<code>zjse_mode</code> and <code>zjse_slot</code> are set; the template is the default. The slot is drawn as the first 200 px of the frame; on the device it is the one dial or key you chose. It shows the most urgent state with its count, and the top pane."
 example default default-compact-mixed "Mixed" "Two panes wait for you: the slot shows the orange marker, 2, and the pane that has waited longest." mixed
 example default default-compact-agents "Three agents" "Claude waits, so the slot shows it." agents
 example default default-compact-busy "Many panes" "Only the most urgent pane is named; the count covers all panes in that state." busy
 example default default-compact-one-blocked "One pane" "A single blocked pane." one-blocked
 example default default-compact-tasks "Working pane" "No waiting pane, so the top state is working." tasks
-example default default-compact-idle "Nothing active" "The slot stays blank (empty idle template). With <code>zjsb_blank_when_idle</code> it is cleared instead." idle
+example default default-compact-idle "Nothing active" "The slot stays blank (empty idle template). With <code>zjse_blank_when_idle</code> it is cleared instead." idle
 
 # ---- Custom templates ----
 subhead custom "Strip" "Templates for the touch strip."
-example custom idle-text "Idle text" "<code>zjsb_idle_template</code> replaces the whole output when nothing is active." idle
+example custom idle-text "Idle text" "<code>zjse_idle_template</code> replaces the whole output when nothing is active." idle
 example custom tasks "Background tasks" "Child records show up as <code>{tasks}</code>." tasks
 example custom age "Age" "<code>{age}</code> is the time since the pane last reported." agents
 example custom custom-layout "Counts and entries re-templated" "A one-line summary on the left, a marker before each name." mixed
@@ -91,12 +91,12 @@ example custom big-marker "Big marker" "A large coloured marker and the name. <c
 example custom progress "Progress first" "Working panes show their percentage, others their state." agents
 example custom kind "State and kind" "The raw protocol values, <code>{state}</code> and <code>{kind}</code>, for people who want them." mixed
 example custom where "Where is it?" "Tab and pane ids, to find the pane that needs you." mixed
-example custom more-segment "The +N more segment" "<code>zjsb_more_template</code>, here with the marker and the number of hidden panes." busy
-subhead custom "The lines layout" "<code>zjsb_layout = \"lines\"</code>: one full-width segment whose rows are tab-separated cells. The counts template is the left gutter, and each entry template line is one column."
+example custom more-segment "The +N more segment" "<code>zjse_more_template</code>, here with the marker and the number of hidden panes." busy
+subhead custom "The lines layout" "<code>zjse_layout = \"lines\"</code>: one full-width segment whose rows are tab-separated cells. The counts template is the left gutter, and each entry template line is one column."
 example custom lines-agents "Three agents on three rows" "The default templates as a grid: marker and count, name, state, message." agents
 example custom lines-busy "Six agents on five rows" "Five is the limit; the last row folds the hidden panes into the more template." busy
-subhead custom "One slot (compact mode)" "<code>zjsb_compact_template</code> and <code>zjsb_idle_template</code>, with the mode and the slot set."
-example custom compact-custom "Compact with age" "<code>zjsb_compact_template</code> with the age." agents
+subhead custom "One slot (compact mode)" "<code>zjse_compact_template</code> and <code>zjse_idle_template</code>, with the mode and the slot set."
+example custom compact-custom "Compact with age" "<code>zjse_compact_template</code> with the age." agents
 example custom compact-ratio "Compact: ratio" "Waiting panes out of all active ones." mixed
 example custom compact-message "Compact: message" "The request itself in the slot." agents
 example custom compact-idle "Compact: idle text" "What the slot shows when nothing is active." idle
@@ -111,7 +111,7 @@ cat <<'HEAD'
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>opendeck-strip previews: the zj-strip-bridge strip</title>
+<title>opendeck-strip previews: the zj-status-export strip</title>
 <style>
   :root { --bg: #fff; --fg: #1d2127; --muted: #5b6573; --card: #f4f6f8; --line: #d8dde3; --link: #0b62c4; }
   @media (prefers-color-scheme: dark) {
@@ -143,20 +143,20 @@ cat <<'HEAD'
 </head>
 <body>
 <main>
-<h1>opendeck-strip previews: the zj-strip-bridge strip</h1>
+<h1>opendeck-strip previews: the zj-status-export strip</h1>
 <p class="lead">What the N4E touch strip shows for each example, rendered by opendeck-strip from the
-zj-strip-bridge status document, without a device (<code>./preview.sh</code>). Each image is the 800x128 raw frame.</p>
+zj-status-export status document, without a device (<code>./preview.sh</code>). Each image is the 800x128 raw frame.</p>
 <nav><a href="#default">Default templates</a> &middot; <a href="#custom">Custom templates</a></nav>
 <div class="legend">
-  <p><span class="badge def">Default</span> built-in templates, <strong>no template settings</strong>. Compact mode only sets <code>zjsb_mode</code> and <code>zjsb_slot</code>.</p>
-  <p><span class="badge cus">Custom</span> one or more <code>zjsb_*_template</code> keys of <code>config.toml</code>, shown in the boxes under the title.</p>
+  <p><span class="badge def">Default</span> built-in templates, <strong>no template settings</strong>. Compact mode only sets <code>zjse_mode</code> and <code>zjse_slot</code>.</p>
+  <p><span class="badge cus">Custom</span> one or more <code>zjse_*_template</code> keys of <code>config.toml</code>, shown in the boxes under the title.</p>
 </div>
 HEAD
 printf '<h2 id="default">Default templates <small>%s examples</small></h2>\n' "$ndef"
 printf '<p class="lead">What you get without any template setting: first the strip, then the one-slot compact mode.</p>\n'
 cat "$DEF"
 printf '<h2 id="custom">Custom templates <small>%s examples</small></h2>\n' "$ncus"
-printf '<p class="lead">The same documents laid out with <code>zjsb_entry_template</code>, <code>zjsb_counts_template</code>, <code>zjsb_more_template</code>, <code>zjsb_compact_template</code> and <code>zjsb_idle_template</code>.</p>\n'
+printf '<p class="lead">The same documents laid out with <code>zjse_entry_template</code>, <code>zjse_counts_template</code>, <code>zjse_more_template</code>, <code>zjse_compact_template</code> and <code>zjse_idle_template</code>.</p>\n'
 cat "$CUS"
 printf '</main>\n</body>\n</html>\n'
 } > preview/index.html

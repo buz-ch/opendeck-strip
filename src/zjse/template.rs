@@ -1,5 +1,5 @@
 //! Tiny template language for the strip and compact outputs, ported unchanged
-//! from `zj-strip-bridge`.
+//! from `zj-status-export`.
 //!
 //! * `{field}` inserts a value, `{field:22}` truncates it to 22 characters,
 //!   `{a|b|c}` uses the first non-empty value, `{{` and `}}` are literal braces.

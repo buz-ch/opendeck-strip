@@ -147,7 +147,7 @@ fn golden_strip_raw() {
 
 #[test]
 fn golden_strip_grid() {
-    // The zjsb `lines` output for the `busy` scenario: five rows, four cells.
+    // The zjse `lines` output for the `busy` scenario: five rows, four cells.
     let busy = concat!(
         "[c=orange]● 2[/c]\t[b]claude[/b]\t[c=orange]needs login[/c]\tlogin expired\n",
         "[c=red]✗ 1[/c]\t[b]codex[/b]\t[c=orange]needs approval[/c]\tapply patch\n",

@@ -14,7 +14,7 @@ It reads everything from one JSON status file, so anything that can write a file
 - **Fills the whole strip.** Continuous mode draws one picture across the four dials with no gaps. Strip text can be split into up to four independent segments with `|`.
 - **Sends full-height frames.** In `raw` mode it renders an 800x128 frame and sends it straight to the AKP05 plugin's socket, so the strip is used edge to edge with no letterbox bands. It falls back to the standard dial-image path when the socket isn't available. `opendeck-strip raw-string "text"` renders a string (same syntax as `set strip`) as such a frame and shows it directly.
 - **Runs from scripts.** `set`, `get`, `clear`, `watch` (re-run a command every few seconds and show its output) and `where` cover everyday use.
-- **Follows and renders a Zellij deck.** `follow-zellij` reads the `zj-strip-bridge` document (`view=state`) from a pipe, renders it here with `zjsb_*` templates and writes the status file; `apply-zellij` does the same for a recorded stream. `follow-zellij` reconnects after stalls and session restarts.
+- **Follows and renders a Zellij deck.** `follow-zellij` reads the `zj-status-export` document (`view=state`) from a pipe, renders it here with `zjse_*` templates and writes the status file; `apply-zellij` does the same for a recorded stream. `follow-zellij` reconnects after stalls and session restarts.
 - **Helps you test.** `strip-preview` renders a PNG without a device, `size-test` measures the image size the device will receive, `raw-test` shows a coloured test frame, `raw-test --ruler` shows an edge ruler, and `doctor` checks the plugin, hidraw access and the installed AKP05 build.
 
 ## Quick example
@@ -24,7 +24,7 @@ opendeck-strip set dial1 'INBOX\n3' dial2 '{"text":"DISK","bar":0.72}'
 opendeck-strip watch --slot dial3 --every 2 -- date +%H:%M
 opendeck-strip clear
 opendeck-strip raw-string '[b]BUILD[/b] [c=green]OK[/c]|CPU 42%|MEM 61%|DISK 72%'   # full 800x128 strip via AKP05 raw mode
-opendeck-strip follow-zellij --clear-on-exit   # show the deck of a running zj-strip-bridge
+opendeck-strip follow-zellij --clear-on-exit   # show the deck of a running zj-status-export
 ```
 
 ## Requirements
@@ -32,7 +32,7 @@ opendeck-strip follow-zellij --clear-on-exit   # show the deck of a running zj-s
 - Mirabox N4E (USB ID `6603:1007`), Linux only.
 - OpenDeck with the [AKP05 device plugin](https://github.com/ambiso/opendeck-akp05) v0.12.0 or newer. Continuous mode also needs N4E firmware 02.014 or newer.
 - For `raw` mode: an AKP05 build with raw strip mode and `strip_raw = true` in its config.
-- For `apply-zellij` and `follow-zellij`: Zellij 0.46.0 or newer with a running `zj-strip-bridge` plugin.
+- For `apply-zellij` and `follow-zellij`: Zellij 0.46.0 or newer with a running `zj-status-export` plugin.
 - Rust 1.89 or newer to build.
 
 Installation, usage and configuration are described below. Supported device: Mirabox N4E.
@@ -181,22 +181,22 @@ opendeck-strip strip test --seconds 30
 opendeck-strip doctor
 ```
 
-`follow-zellij` shows the deck served by `zj-strip-bridge` over `zellij pipe`. It resolves a live Zellij session, starts `zellij --session S pipe --name zjsb.follow -a view=state start`, renders each document with the `zjsb_*` settings below, writes the status file, and reconnects after a stall or a session restart. `--session NAME` pins a session, `--clear-on-exit` blanks the slots the renderer owns on SIGTERM or SIGINT, and `--once` stops after the first stream (exit 0 if a write happened, else 1). `apply-zellij` is the same reader and renderer without the supervisor; it takes the stream on standard input.
+`follow-zellij` shows the deck served by `zj-status-export` over `zellij pipe`. It resolves a live Zellij session, starts `zellij --session S pipe --name zj-status-export.follow -a view=state start`, renders each document with the `zjse_*` settings below, writes the status file, and reconnects after a stall or a session restart. `--session NAME` pins a session, `--clear-on-exit` blanks the slots the renderer owns on SIGTERM or SIGINT, and `--once` stops after the first stream (exit 0 if a write happened, else 1). `apply-zellij` is the same reader and renderer without the supervisor; it takes the stream on standard input.
 
 Run from a systemd user unit, `follow-zellij` finds `zellij` through the unit's `PATH`, not your shell's. The example unit puts `~/.local/bin` on that `PATH`; without it a zellij installed there is not found, and the log repeats `cannot list zellij sessions` instead of reconnecting.
 
-Without `--session`, `follow-zellij` uses the oldest live session. If `zj-strip-bridge` runs in only one session, pin that one; an auto-generated session name changes when a new session is created, so start the pinned session with an explicit name (`zellij -s work`).
+Without `--session`, `follow-zellij` uses the oldest live session. If `zj-status-export` runs in only one session, pin that one; an auto-generated session name changes when a new session is created, so start the pinned session with an explicit name (`zellij -s work`).
 
 `--view` selects the stream: `state` (the default) reads complete version 2 documents and renders them here; `deck` is the legacy reader for deck frames from an older `pipe`-branch plugin. The new `data-only` plugin refuses `view=deck` with `unknown view`.
 
 ```sh
 opendeck-strip follow-zellij
 opendeck-strip follow-zellij --session work --clear-on-exit
-(printf 'start\n'; cat) | zellij --session work pipe --name zjsb.follow | opendeck-strip apply-zellij
+(printf 'start\n'; cat) | zellij --session work pipe --name zj-status-export.follow | opendeck-strip apply-zellij
 opendeck-strip apply-zellij --view deck < recorded-frames.ndjson
 ```
 
-A systemd user unit is in `examples/opendeck-strip-follow-zellij.service` (`follow-zellij --clear-on-exit`). The document, renderer, exit codes and reconnect rules are documented in [docs/status-format.md](docs/status-format.md#following-zj-strip-bridge).
+A systemd user unit is in `examples/opendeck-strip-follow-zellij.service` (`follow-zellij --clear-on-exit`). The document, renderer, exit codes and reconnect rules are documented in [docs/status-format.md](docs/status-format.md#following-zj-status-export).
 
 `watch` runs a command on an interval and shows its first four output lines. Failures and timeouts use a red error style. The command is executed directly, not through a shell, so arguments with spaces stay intact; use `sh -c` for pipes and redirection.
 
@@ -275,7 +275,7 @@ The full schema, the span object fields and the internal `@slices:<dir>#<n>` for
 
 ## Configuration
 
-The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFIG` selects another file. Every key can be overridden with an environment variable named `OPENDECK_STRIP_` plus the upper-case key, for example `OPENDECK_STRIP_STRIP_MODE=tiles`. Boolean keys (`follow`, `word_wrap`, `strip_uniform_size`, `strip_uniform_skip_first`, `zjsb_blank_when_idle`) accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case.
+The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFIG` selects another file. Every key can be overridden with an environment variable named `OPENDECK_STRIP_` plus the upper-case key, for example `OPENDECK_STRIP_STRIP_MODE=tiles`. Boolean keys (`follow`, `word_wrap`, `strip_uniform_size`, `strip_uniform_skip_first`, `zjse_blank_when_idle`) accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -303,16 +303,16 @@ The config file is `~/.config/opendeck-strip/config.toml`. `OPENDECK_STRIP_CONFI
 | `raw_socket` | none | AKP05 raw socket path for `strip_mode = raw`; default is found automatically |
 | `watch_timeout_secs` | 5 | Timeout for `watch` commands |
 | `follow` | false | Expect `follow-zellij` to run; `doctor` then checks for a live Zellij session |
-| `zjsb_mode` | `strip` | `strip`: counts plus entries across the strip; `compact`: one entry in `zjsb_slot` |
-| `zjsb_layout` | `segments` | `segments`: counts plus entries across the strip; `lines`: one row per entry, cells in tab columns |
-| `zjsb_slot` | `dial1` | Compact mode only: `dial1` to `dial4`, or `key<row>_<col>` with row and column 1 to 9 |
-| `zjsb_blank_when_idle` | false | Clear the owned slots when nothing is active, instead of the idle text |
-| `zjsb_min_interval_ms` | 1000 | Minimum time between two writes while following; the latest state wins |
-| `zjsb_entry_template` | see below | One deck entry |
-| `zjsb_counts_template` | see below | The counts segment |
-| `zjsb_more_template` | see below | The `+N more` segment |
-| `zjsb_compact_template` | see below | The one entry of compact mode |
-| `zjsb_idle_template` | empty | The whole strip (or compact slot) when nothing is active; empty means the counts panel plus `All clear` |
+| `zjse_mode` | `strip` | `strip`: counts plus entries across the strip; `compact`: one entry in `zjse_slot` |
+| `zjse_layout` | `segments` | `segments`: counts plus entries across the strip; `lines`: one row per entry, cells in tab columns |
+| `zjse_slot` | `dial1` | Compact mode only: `dial1` to `dial4`, or `key<row>_<col>` with row and column 1 to 9 |
+| `zjse_blank_when_idle` | false | Clear the owned slots when nothing is active, instead of the idle text |
+| `zjse_min_interval_ms` | 1000 | Minimum time between two writes while following; the latest state wins |
+| `zjse_entry_template` | see below | One deck entry |
+| `zjse_counts_template` | see below | The counts segment |
+| `zjse_more_template` | see below | The `+N more` segment |
+| `zjse_compact_template` | see below | The one entry of compact mode |
+| `zjse_idle_template` | empty | The whole strip (or compact slot) when nothing is active; empty means the counts panel plus `All clear` |
 
 `padding` was replaced by `padding_horizontal` and `padding_vertical`. A config that still sets `padding` is reported as an unknown key and is ignored, so replace it with the two keys.
 
@@ -331,7 +331,7 @@ opendeck-strip set labels 0
 
 ### Every key, as a commented block
 
-Every key is optional; a missing key keeps its default. A value that cannot be used is reported as a warning in the log and in `doctor` and that key keeps its default (a number outside its range is clamped), while the rest of the file stays in effect. Each key can also be set with `OPENDECK_STRIP_` plus its upper-case name (`OPENDECK_STRIP_ZJSB_MODE=compact`); booleans accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case. The five templates are TOML multi-line basic strings (`"""…"""`), so `\n` is a real newline and quotes need no escaping. Empty lines in a template are ignored, so the position of the closing `"""` does not matter. `{age}` is computed when a document arrives and is not refreshed until the next one.
+Every key is optional; a missing key keeps its default. A value that cannot be used is reported as a warning in the log and in `doctor` and that key keeps its default (a number outside its range is clamped), while the rest of the file stays in effect. Each key can also be set with `OPENDECK_STRIP_` plus its upper-case name (`OPENDECK_STRIP_ZJSE_MODE=compact`); booleans accept `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any case. The five templates are TOML multi-line basic strings (`"""…"""`), so `\n` is a real newline and quotes need no escaping. Empty lines in a template are ignored, so the position of the closing `"""` does not matter. `{age}` is computed when a document arrives and is not refreshed until the next one.
 
 ```toml
 # font_sans = "/path/to/SourceSans3-Regular.ttf"          # proportional regular; default: embedded
@@ -367,35 +367,35 @@ Every key is optional; a missing key keeps its default. A value that cannot be u
 # watch_timeout_secs = 5           # timeout for `watch` commands, above 0
 # follow = false                   # true | false: `doctor` checks for a live Zellij session
 
-# zjsb_mode = "strip"              # strip | compact
-# zjsb_layout = "segments"         # segments | lines: one row per entry with tab columns
-# zjsb_slot = "dial1"              # compact only: dial1..dial4 or key<row>_<col>, row and column 1 to 9
-# zjsb_blank_when_idle = false     # true | false: clear the owned slots instead of the idle text
-# zjsb_min_interval_ms = 1000      # minimum time between two writes, above 0
-# zjsb_entry_template = """
+# zjse_mode = "strip"              # strip | compact
+# zjse_layout = "segments"         # segments | lines: one row per entry with tab columns
+# zjse_slot = "dial1"              # compact only: dial1..dial4 or key<row>_<col>, row and column 1 to 9
+# zjse_blank_when_idle = false     # true | false: clear the owned slots instead of the idle text
+# zjse_min_interval_ms = 1000      # minimum time between two writes, above 0
+# zjse_entry_template = """
 # [b]{app|title:14}[/b]
 # [c={color}]{state_label}[/c]
 # {progress_pct|msg:22}"""
-# zjsb_counts_template = """
+# zjse_counts_template = """
 # [c={needs_you_color}]● {needs_you}[/c]
 # [c={failed_color}]✗ {failed}[/c]
 # [c={done_color}]✓ {done}[/c]
 # [c={working_color}]» {working}[/c]"""
-# zjsb_more_template = """
+# zjse_more_template = """
 # [b]+{hidden} more[/b]
 # [c={color}]{state_label}[/c]
 # see inbox"""
-# zjsb_compact_template = """
+# zjse_compact_template = """
 # [c={color}]{marker} {count}[/c]
 # {app|title:8}"""
-# zjsb_idle_template = ""          # empty: the counts panel plus "All clear"
+# zjse_idle_template = ""          # empty: the counts panel plus "All clear"
 ```
 
-With `zjsb_layout = "lines"` the templates change meaning: each line of `zjsb_counts_template` is one gutter cell, each line of `zjsb_entry_template` one cell of an entry row, and each line of `zjsb_more_template` one cell of the `+N more` row. The strip is one full-width segment of at most five rows, cells separated by tabs. See [the `lines` layout](docs/status-format.md#the-lines-layout).
+With `zjse_layout = "lines"` the templates change meaning: each line of `zjse_counts_template` is one gutter cell, each line of `zjse_entry_template` one cell of an entry row, and each line of `zjse_more_template` one cell of the `+N more` row. The strip is one full-width segment of at most five rows, cells separated by tabs. See [the `lines` layout](docs/status-format.md#the-lines-layout).
 
 ### Migrating from the plugin
 
-The plugin's `mode`, `slot`, `blank_when_idle`, `min_interval_ms` and five template keys move here as `zjsb_mode`, `zjsb_slot`, `zjsb_blank_when_idle`, `zjsb_min_interval_ms` and the five `zjsb_*_template` keys. `output`, `bin` and the plugin-side templates are gone. A KDL `\\n` becomes a real newline in a TOML `"""…"""` string, and `\"` becomes `"`. Because the strip is now rendered from the document, `export_peers false` thins the strip as well as `entries.json`; the default `true` keeps the merged deck of every session. The two stream commands are now `apply-zellij` and `follow-zellij` (no `apply`/`follow` aliases); the unit is `examples/opendeck-strip-follow-zellij.service`.
+The plugin's `mode`, `slot`, `blank_when_idle`, `min_interval_ms` and five template keys move here as `zjse_mode`, `zjse_slot`, `zjse_blank_when_idle`, `zjse_min_interval_ms` and the five `zjse_*_template` keys. `output`, `bin` and the plugin-side templates are gone. A KDL `\\n` becomes a real newline in a TOML `"""…"""` string, and `\"` becomes `"`. Because the strip is now rendered from the document, `export_peers false` thins the strip as well as `entries.json`; the default `true` keeps the merged deck of every session. The two stream commands are now `apply-zellij` and `follow-zellij` (no `apply`/`follow` aliases); the unit is `examples/opendeck-strip-follow-zellij.service`.
 
 ### Segment font sizes
 
@@ -415,7 +415,7 @@ Keys receive OpenDeck titles, so inline styling on a key is flattened to plain t
 
 Logs go to standard error and to `<status file>.log`. The default level is `info`; use `RUST_LOG=debug` for more detail. Every CLI command also appends to that log.
 
-Every stream logs its `hello` line at `info`: `state stream: plugin zj-strip-bridge version 0.0.1 build <build> session S view state`. That `build` is the git commit and the UTC build time of the wasm the Zellij session loaded, so the `follow-zellij` log says which plugin build a session runs, not which one is on disk.
+Every stream logs its `hello` line at `info`: `state stream: plugin zj-status-export version 0.0.1 build <build> session S view state`. That `build` is the git commit and the UTC build time of the wasm the Zellij session loaded, so the `follow-zellij` log says which plugin build a session runs, not which one is on disk.
 
 Every `state` document is logged at `info` too, as `state: synced=true 2 session(s) [work, play], 3 record(s), 1 on deck: claude/blocked, cargo/working`: the session names, the record and on-deck counts, and the first four records as `app/state`. A deck that shows nothing can be traced to one of these lines — `synced=false`, `0 record(s)`, or records that are there but not on deck.
 
@@ -446,9 +446,9 @@ Never write the boot logo or any ROM data. The device SDK warns that this can br
 
 ## Development
 
-The crate is split into `cli`, `status`, `frame`, `follow`, `plugin`, `render` (`canvas`, `fonts`, `layout`, `markup`), `zjsb` (`document`, `template`, `examples`), `encode`, `sizetest`, `install`, `doctor`, `config`, `color` and `logging`.
+The crate is split into `cli`, `status`, `frame`, `follow`, `plugin`, `render` (`canvas`, `fonts`, `layout`, `markup`), `zjse` (`document`, `template`, `examples`), `encode`, `sizetest`, `install`, `doctor`, `config`, `color` and `logging`.
 
-`preview.sh` and `preview/` render the 29 preview examples from the document fixtures in `tests/zjsb/` (scenario documents, `examples.toml`, expected strings) with the `zjsb_preview` example; `cargo test --test zjsb_golden` checks the same 29 strings byte for byte.
+`preview.sh` and `preview/` render the 29 preview examples from the document fixtures in `tests/zjse/` (scenario documents, `examples.toml`, expected strings) with the `zjse_preview` example; `cargo test --test zjse_golden` checks the same 29 strings byte for byte.
 
 Tests:
 

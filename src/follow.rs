@@ -1,4 +1,4 @@
-//! `follow-zellij`: supervise `zellij pipe --name zjsb.follow -a view=state` and apply
+//! `follow-zellij`: supervise `zellij pipe --name zj-status-export.follow -a view=state` and apply
 //! the documents it carries; `--view deck` keeps the legacy frame reader.
 //!
 //! The pipe stays open by holding the child's stdin open and passing a `start`
@@ -233,7 +233,7 @@ fn spawn(zellij: &Path, session: &str, view: View) -> Result<Child> {
             session,
             "pipe",
             "--name",
-            "zjsb.follow",
+            "zj-status-export.follow",
             "-a",
             view,
             "start",

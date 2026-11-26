@@ -171,7 +171,7 @@ In continuous mode each segment occupies 200 logical pixels of the 800-pixel can
 
 A tab in a single-segment strip value (one with no `|`) lays the value out as a grid of columns. This applies when the strip mode is `raw` or `continuous` (including the continuous fallback from `raw`) and `word_wrap` is off, and when at least one line holds a tab. It does not apply to keys, dials, multi-segment strips, `tiles` mode or wrapped text; a tab is drawn as four spaces there. In `tiles` mode a tab also logs a warning, because the value was probably meant as a grid. The continuous fallback joins the four dial images, so the grid still spans the strip.
 
-This covers `set strip`, `raw-string`, `strip-preview`, `watch` writing to the strip, a status file edited directly and the zj-strip-bridge writer. Both `text` and `spans` values work.
+This covers `set strip`, `raw-string`, `strip-preview`, `watch` writing to the strip, a status file edited directly and the zj-status-export writer. Both `text` and `spans` values work.
 
 Cells:
 
@@ -262,19 +262,19 @@ Strip with segments and a non-default mode:
 }
 ```
 
-## Following zj-strip-bridge
+## Following zj-status-export
 
-`zj-strip-bridge` serves its data over `zellij pipe`. `opendeck-strip apply-zellij` reads that stream and renders it into the status file; `opendeck-strip follow-zellij` starts it, renders the same way and reconnects.
+`zj-status-export` serves its data over `zellij pipe`. `opendeck-strip apply-zellij` reads that stream and renders it into the status file; `opendeck-strip follow-zellij` starts it, renders the same way and reconnects.
 
-`follow-zellij` and `apply-zellij` read `zellij … pipe --name zjsb.follow` with `view=state` by default. `--view state|deck` selects the reader: `state` reads the complete version 2 documents of the current plugin; `deck` is the legacy reader for deck frames from an older `pipe`-branch plugin (see "Frame format" below). The `data-only` plugin refuses `view=deck` with `unknown view`.
+`follow-zellij` and `apply-zellij` read `zellij … pipe --name zj-status-export.follow` with `view=state` by default. `--view state|deck` selects the reader: `state` reads the complete version 2 documents of the current plugin; `deck` is the legacy reader for deck frames from an older `pipe`-branch plugin (see "Frame format" below). The `data-only` plugin refuses `view=deck` with `unknown view`.
 
 ### Rendering the document
 
-1. **Stream.** Each `state` line carries a complete version 2 document under `doc`. `follow-zellij` starts `zellij --session S pipe --name zjsb.follow -a view=state start`; `apply-zellij` reads the same lines on standard input. `hello` is logged, `ping` and unknown types are ignored, and `error` is logged. A line without a numeric `v`, or a malformed `state` line, is logged and skipped. A version above this build's is exit code 2. A `seq` gap is only a warning, because every state line replaces the whole deck.
+1. **Stream.** Each `state` line carries a complete version 2 document under `doc`. `follow-zellij` starts `zellij --session S pipe --name zj-status-export.follow -a view=state start`; `apply-zellij` reads the same lines on standard input. `hello` is logged, `ping` and unknown types are ignored, and `error` is logged. A line without a numeric `v`, or a malformed `state` line, is logged and skipped. A version above this build's is exit code 2. A `seq` gap is only a warning, because every state line replaces the whole deck.
 
-2. **Selection.** The renderer takes the records with `on_deck: true` from the document, collects them in document order (sessions, then panes), and stable-sorts them by priority: blocked oldest first, then error, done and working newest first; tab id, pane id, pane title and session name break ties. Counts come from those records (`blocked` → needs you, `error` → failed, `done` → done, `working` → working). In `segments` (the default layout) the strip is the counts segment plus up to three entries. With more than three, it shows the first two and a `+N more` segment whose `hidden` is the rest and whose colour, marker and `state_label` come from the highest hidden state (blocked reads "need you"). With nothing active the `zjsb_idle_template` is the whole strip; without one, the counts panel is followed by the default `All clear` text; `zjsb_blank_when_idle` clears the slots instead. `attention_enabled: false` shows the fixed `Zellij attention is off` text. Compact mode is the first entry (or the idle template, or a clear) in `zjsb_slot`. The `lines` layout is described below.
+2. **Selection.** The renderer takes the records with `on_deck: true` from the document, collects them in document order (sessions, then panes), and stable-sorts them by priority: blocked oldest first, then error, done and working newest first; tab id, pane id, pane title and session name break ties. Counts come from those records (`blocked` → needs you, `error` → failed, `done` → done, `working` → working). In `segments` (the default layout) the strip is the counts segment plus up to three entries. With more than three, it shows the first two and a `+N more` segment whose `hidden` is the rest and whose colour, marker and `state_label` come from the highest hidden state (blocked reads "need you"). With nothing active the `zjse_idle_template` is the whole strip; without one, the counts panel is followed by the default `All clear` text; `zjse_blank_when_idle` clears the slots instead. `attention_enabled: false` shows the fixed `Zellij attention is off` text. Compact mode is the first entry (or the idle template, or a clear) in `zjse_slot`. The `lines` layout is described below.
 
-3. **Templates.** The five templates live in `config.toml`: `zjsb_entry_template` (default `[b]{app|title:14}[/b]\n[c={color}]{state_label}[/c]\n{progress_pct|msg:22}`), `zjsb_counts_template` (default the four `● ✗ ✓ »` count lines), `zjsb_more_template` (default `[b]+{hidden} more[/b]\n[c={color}]{state_label}[/c]\nsee inbox`), `zjsb_compact_template` (default `[c={color}]{marker} {count}[/c]\n{app|title:8}`) and `zjsb_idle_template` (default empty).
+3. **Templates.** The five templates live in `config.toml`: `zjse_entry_template` (default `[b]{app|title:14}[/b]\n[c={color}]{state_label}[/c]\n{progress_pct|msg:22}`), `zjse_counts_template` (default the four `● ✗ ✓ »` count lines), `zjse_more_template` (default `[b]+{hidden} more[/b]\n[c={color}]{state_label}[/c]\nsee inbox`), `zjse_compact_template` (default `[c={color}]{marker} {count}[/c]\n{app|title:8}`) and `zjse_idle_template` (default empty).
 
    Syntax: `{field}` inserts a value, `{field:24}` truncates to 24 characters with `…`, `{a|b|c}` takes the first non-empty value, and `{{`/`}}` are literal braces. A literal `\n` and a real newline both separate lines. In `segments` a line whose placeholders are all empty is dropped; `lines` keeps it as an empty cell. A template is limited to 8 lines. Values are sanitised: control characters and `|` become spaces, `[` is escaped as `[[`, whitespace is collapsed, and long values are truncated. `|` in the template text itself is refused, because it would add a strip segment.
 
@@ -284,17 +284,17 @@ Strip with segments and a non-default mode:
 
 4. **Raw mode.** When the renderer writes a strip it sets `strip_mode = "raw"` in the status file once; compact mode does not. `labels` and `strip_gap` stay writer and status-file keys.
 
-5. **Throttle.** `zjsb_min_interval_ms` (default 1000) is the minimum time between two writes; the latest state wins. Text that is already shown is not rewritten. A held state is written when the interval elapses, at the end of the stream and before a reconnect. An idle, stall or grace clear resets the "shown" state, so the next identical state is written again. `--clear-on-exit`, `--grace-secs`, `--stall-secs` and `--once` keep their meanings; a state write counts as an applied frame.
+5. **Throttle.** `zjse_min_interval_ms` (default 1000) is the minimum time between two writes; the latest state wins. Text that is already shown is not rewritten. A held state is written when the interval elapses, at the end of the stream and before a reconnect. An idle, stall or grace clear resets the "shown" state, so the next identical state is written again. `--clear-on-exit`, `--grace-secs`, `--stall-secs` and `--once` keep their meanings; a state write counts as an applied frame.
 
 ### The `lines` layout
 
-`zjsb_layout = "segments" | "lines"` (default `segments`) selects how strip mode lays the deck out; it has no effect in compact mode, which logs that the layout is ignored. `lines` writes one full-width segment whose rows are separated by a newline and whose cells are separated by a tab. The status file then holds real tabs and newlines, like a `set strip` value with `\t` and `\n`. A `|` is never written.
+`zjse_layout = "segments" | "lines"` (default `segments`) selects how strip mode lays the deck out; it has no effect in compact mode, which logs that the layout is ignored. `lines` writes one full-width segment whose rows are separated by a newline and whose cells are separated by a tab. The status file then holds real tabs and newlines, like a `set strip` value with `\t` and `\n`. A `|` is never written.
 
 Cells come from the templates:
 
-- The lines of `zjsb_counts_template` are the left gutter, one line per row.
-- The lines of `zjsb_entry_template` are the cells of one entry row, so the default three-line template gives `name | state | message` after the gutter.
-- The lines of `zjsb_more_template` are the cells of the `+N more` row.
+- The lines of `zjse_counts_template` are the left gutter, one line per row.
+- The lines of `zjse_entry_template` are the cells of one entry row, so the default three-line template gives `name | state | message` after the gutter.
+- The lines of `zjse_more_template` are the cells of the `+N more` row.
 
 For these three templates, a line whose placeholders are all empty yields an empty cell, including its literal text, and keeps its position; in `segments` such a line is dropped. A blank template line is still removed when the config is loaded, while a line holding one space is a spacer. One template line is one cell: a tab in template text, literal or the two characters `\t`, becomes a space, so values cannot inject cells. Markup is parsed per output row, so a tag left unclosed in one template line carries into the later cells of that row.
 
@@ -311,9 +311,9 @@ The 400-character `MAX_SEGMENT` total does not apply to `lines`: each row has it
 
 Idle and attention:
 
-- A non-empty `zjsb_idle_template` replaces the whole output; its lines are rows, cut to five. One template line is one cell, and a tab in its text, literal or the two characters `\t`, is a space too.
+- A non-empty `zjse_idle_template` replaces the whole output; its lines are rows, cut to five. One template line is one cell, and a tab in its text, literal or the two characters `\t`, is a space too.
 - With an empty idle template and nothing active, the gutter stays and row 1 gets the `All clear` text as its first entry cell. With an empty counts template too, the output is that line alone.
-- `zjsb_blank_when_idle` behaves as in `segments`, and `attention_enabled: false` still shows the fixed attention-off text.
+- `zjse_blank_when_idle` behaves as in `segments`, and `attention_enabled: false` still shows the fixed attention-off text.
 
 An output without any tab (an idle replacement, the attention-off text, or a single column) is not a grid and follows the global `align`.
 
@@ -334,7 +334,7 @@ With default templates and six entries, the strip shows:
 Reads a `view=state` stream on standard input, renders each document and applies it to the status file in one atomic read-modify-write.
 
 ```sh
-(printf 'start\n'; cat) | zellij --session work pipe --name zjsb.follow | opendeck-strip apply-zellij
+(printf 'start\n'; cat) | zellij --session work pipe --name zj-status-export.follow | opendeck-strip apply-zellij
 opendeck-strip apply-zellij --view deck < recorded-deck-frames.ndjson
 ```
 
@@ -372,9 +372,9 @@ opendeck-strip follow-zellij [--session NAME] [--zellij BIN] [--stall-secs N] [-
 | `--once` | off | Read until the first end of stream, then exit: 0 if a write happened, 1 if none was |
 | `--view` | `state` | `state`: complete documents rendered here; `deck`: legacy frames |
 
-Without `--session` the session is resolved on every connection attempt: `$ZELLIJ_SESSION_NAME` when it appears in `zellij list-sessions --no-formatting`, otherwise the first live line. Lines containing `(EXITED - attach to resurrect)` are dead sessions. The first live session is not necessarily the one that runs `zj-strip-bridge`; with several sessions, pin the one that has the plugin. A session given with `--session` is connected to by that name but is still checked against the same list on every attempt: when it is not live, `follow-zellij` waits for it and clears the owned slots after `--grace-secs`, as for any other session. Zellij's auto-generated session names change when a new session is created, so pin a session that is started with an explicit name. When the sessions cannot be listed at all, it logs a warning and retries; it neither connects a session it would have had to guess nor clears.
+Without `--session` the session is resolved on every connection attempt: `$ZELLIJ_SESSION_NAME` when it appears in `zellij list-sessions --no-formatting`, otherwise the first live line. Lines containing `(EXITED - attach to resurrect)` are dead sessions. The first live session is not necessarily the one that runs `zj-status-export`; with several sessions, pin the one that has the plugin. A session given with `--session` is connected to by that name but is still checked against the same list on every attempt: when it is not live, `follow-zellij` waits for it and clears the owned slots after `--grace-secs`, as for any other session. Zellij's auto-generated session names change when a new session is created, so pin a session that is started with an explicit name. When the sessions cannot be listed at all, it logs a warning and retries; it neither connects a session it would have had to guess nor clears.
 
-`follow-zellij` runs `zellij --session S pipe --name zjsb.follow -a view=state start` (`view=deck` under `--view deck`) with the child's standard input held open and never written to. It reconnects when the process exits, stdout reaches end of file, or no line arrives for `--stall-secs`. On a state stream a `seq` gap is only a warning: each line is a complete document. The stall clock counts from the last line of any connection, not from the last connection, and is also checked between reconnects, so a producer that never sends a line is cleared after `--stall-secs` however quickly each connection ends. The owned slots (`strip` and `dial1` to `dial4`, or the compact slot from `zjsb_mode`/`zjsb_slot`) are cleared once per silent stretch, before `follow-zellij` reconnects; `--clear-on-exit` does the same on SIGTERM or SIGINT. A hard kill leaves the last render on the deck.
+`follow-zellij` runs `zellij --session S pipe --name zj-status-export.follow -a view=state start` (`view=deck` under `--view deck`) with the child's standard input held open and never written to. It reconnects when the process exits, stdout reaches end of file, or no line arrives for `--stall-secs`. On a state stream a `seq` gap is only a warning: each line is a complete document. The stall clock counts from the last line of any connection, not from the last connection, and is also checked between reconnects, so a producer that never sends a line is cleared after `--stall-secs` however quickly each connection ends. The owned slots (`strip` and `dial1` to `dial4`, or the compact slot from `zjse_mode`/`zjse_slot`) are cleared once per silent stretch, before `follow-zellij` reconnects; `--clear-on-exit` does the same on SIGTERM or SIGINT. A hard kill leaves the last render on the deck.
 
 `follow-zellij` exits with 0 on SIGTERM or SIGINT, with 1 when the stream could not be read and, under `--once`, when nothing was written or no session was live, and with 2 on a line with a higher `v`. `--idle-clear` and `--stall-secs` must be at least 1; 0 is a usage error (exit 2).
 
@@ -397,12 +397,12 @@ directory` and never connects.
 
 ### Frame format (legacy)
 
-The deck frames described here belong to the older `pipe`-branch plugin and are only parsed with `--view deck`. A current `zj-strip-bridge` (`data-only`) answers `view=deck` with `unknown view`.
+The deck frames described here belong to the older `pipe`-branch plugin and are only parsed with `--view deck`. A current `zj-status-export` (`data-only`) answers `view=deck` with `unknown view`.
 
 Every line is one JSON object with `"v": 1` and `"type"`. `seq` starts at 0 for `hello` and increases by one per line of a connection; a reconnect starts at 0 again. A skipped or repeated number means a line was lost. A delta cannot rebuild what was lost, and a delta played as full would delete every owned slot it does not set, so `follow-zellij --view deck` ends the connection on a gap without applying that frame and reconnects, where the first frame is full; `apply-zellij --view deck` warns and applies the numbered lines as what they declare.
 
 ```json
-{"v":1,"type":"hello","plugin":"zj-strip-bridge","version":"0.0.1","session":"work","view":"deck","seq":0}
+{"v":1,"type":"hello","plugin":"zj-status-export","version":"0.0.1","session":"work","view":"deck","seq":0}
 {"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"<markup>"},"settings":{"strip_mode":"raw"},"clear":[],"owned":["strip","dial1","dial2","dial3","dial4"]}
 {"v":1,"type":"deck","seq":2,"full":false,"set":{"strip":"<markup>"},"settings":{},"clear":[]}
 {"v":1,"type":"state","seq":3,"doc":{ ...version 2 document... }}

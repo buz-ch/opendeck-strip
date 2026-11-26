@@ -33,10 +33,10 @@ reports. It does not write feature code.
 | Order | Task | Agent | Files owned |
 |---|---|---|---|
 | 0 | T0 branch and docs | orchestrator | `docs/lines-layout-*.md` |
-| 1 | T1 config and template cells | `general-purpose` | `src/config.rs`, `src/config_tests.rs`, `src/zjsb/template.rs` |
+| 1 | T1 config and template cells | `general-purpose` | `src/config.rs`, `src/config_tests.rs`, `src/zjse/template.rs` |
 | 2 | T2 grid layout | `general-purpose` | `src/render/layout.rs`, one line of `src/render/mod.rs` |
 | 3 | T3 renderer wiring | `general-purpose` | `src/render/mod.rs`, `tests/render_edge.rs`, `tests/golden.rs`, `tests/golden/strip_grid.png` |
-| 4 | T4 zjsb `lines` | `general-purpose` | `src/zjsb/{mod,examples,tests}.rs`, `tests/zjsb/`, `tests/zjsb_golden.rs`, `tests/cli.rs` |
+| 4 | T4 zjse `lines` | `general-purpose` | `src/zjse/{mod,examples,tests}.rs`, `tests/zjse/`, `tests/zjse_golden.rs`, `tests/cli.rs` |
 | 5 | T5 docs and previews | `general-purpose` | `README.md`, `docs/status-format.md`, `docs/on-device-checklist.md`, `examples/config.toml`, `preview.sh`, `preview/` |
 | 6 | T6 review | `gsd-code-reviewer` | `REVIEW.md` in the scratchpad |
 | 7 | T7 fixes and final check | `general-purpose`, then orchestrator | as needed |
@@ -66,7 +66,7 @@ Each prompt is the preamble plus: `Your task is T<n>.`
 
 1. Read the report and resolve deviations.
 2. `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`.
-3. `git diff --stat main -- tests/golden tests/zjsb/expected` shows only new
+3. `git diff --stat main -- tests/golden tests/zjse/expected` shows only new
    files.
 4. A failure goes back to the same agent (`SendMessage`). Do not start the next
    task on a red tree.
@@ -81,13 +81,13 @@ the design and this plan if they have uncommitted changes. Leave
 
 ### `src/config.rs`
 
-- Fields: `column_gap: u32` (default 2), `zjsb_layout: String` (default
+- Fields: `column_gap: u32` (default 2), `zjse_layout: String` (default
   `"segments"`).
 - `KEYS` rows: `column_gap` is `Kind::Num { real: false, min:
-  Limit::AtLeast(0.0), max: Some(16.0) }`; `zjsb_layout` is
-  `Kind::Enum("one of segments, lines", is_zjsb_layout)`.
-- Cross-key warnings in `normalise`, only when `zjsb_layout == "lines"`:
-  1. `zjsb_mode == "compact"`: layout ignored; stop here (D2).
+  Limit::AtLeast(0.0), max: Some(16.0) }`; `zjse_layout` is
+  `Kind::Enum("one of segments, lines", is_zjse_layout)`.
+- Cross-key warnings in `normalise`, only when `zjse_layout == "lines"`:
+  1. `zjse_mode == "compact"`: layout ignored; stop here (D2).
   2. `word_wrap`: no columns.
   3. counts template has more than five lines: first five are shown.
   4. more and entry templates differ in line count: more row will not align.
@@ -95,7 +95,7 @@ the design and this plan if they have uncommitted changes. Leave
 - Warnings change no value. Follow the wording style of the existing ones:
   name the key, the value, the consequence.
 
-### `src/zjsb/template.rs`
+### `src/zjse/template.rs`
 
 ```rust
 /// Number of template lines kept by `parse`.
@@ -115,10 +115,10 @@ pub fn render_cells(&self, ctx: &Ctx) -> Vec<String>;
   literal-only line kept; space line kept; real and literal tab become spaces;
   `\\t` untouched; a value holding a tab or `\t` makes no cell.
 - Config: both keys from file and env; `column_gap = 40` clamps to 16 with a
-  warning; bad `zjsb_layout` keeps `segments`; each warning fires alone and not
+  warning; bad `zjse_layout` keeps `segments`; each warning fires alone and not
   for `segments`; 16 does not warn, 17 does.
 - `every_key_loads_from_the_file_and_the_environment`: key count 37 → 39, add
-  the `"zjsb_layout" => "lines"` arm. That test also sets `zjsb_mode =
+  the `"zjse_layout" => "lines"` arm. That test also sets `zjse_mode =
   "compact"`, so replace its two `warnings.is_empty()` asserts with an assert
   that the only warning is "layout ignored".
 
@@ -206,9 +206,9 @@ Golden `strip_grid`: raw mode, the five `busy` rows from T4. Create it with
 `UPDATE_GOLDEN=1 cargo test --test golden golden_strip_grid` (only that test),
 then open the PNG and check the columns before committing.
 
-## T4: zjsb `lines` layout
+## T4: zjse `lines` layout
 
-### `src/zjsb/mod.rs`
+### `src/zjse/mod.rs`
 
 ```rust
 pub enum Layout { Segments, Lines }   // Options.layout, default Segments
@@ -235,23 +235,23 @@ const ALL_CLEAR: &str = "[c=#66cc88][b]All clear[/b][/c]";
 
 ### Other files
 
-- `Options::from_config` maps `zjsb_layout`.
-- `src/zjsb/examples.rs`: `apply` accepts `zjsb_layout`.
-- `tests/zjsb/examples.toml`: add `lines-agents` and `lines-busy`; update the
-  count in the header, in `tests/zjsb_golden.rs` and in `src/zjsb/tests.rs`.
+- `Options::from_config` maps `zjse_layout`.
+- `src/zjse/examples.rs`: `apply` accepts `zjse_layout`.
+- `tests/zjse/examples.toml`: add `lines-agents` and `lines-busy`; update the
+  count in the header, in `tests/zjse_golden.rs` and in `src/zjse/tests.rs`.
 
 ### Expected strings
 
 Write these by hand, without a trailing newline. Do not generate them from the
 code under test.
 
-`tests/zjsb/expected/lines-agents.txt`, one line in the file:
+`tests/zjse/expected/lines-agents.txt`, one line in the file:
 
 ```text
 [c=orange]● 1[/c]\t[b]claude[/b]\t[c=orange]needs approval[/c]\trun cargo test\n[c=grey]✗ 0[/c]\t[b]opencode[/b]\t[c=green]done[/c]\tPR #42 ready\n[c=green]✓ 1[/c]\t[b]codex[/b]\t[c=#55ccff]working[/c]\t60%\n[c=#55ccff]» 1[/c]\t
 ```
 
-`tests/zjsb/expected/lines-busy.txt`, one line in the file:
+`tests/zjse/expected/lines-busy.txt`, one line in the file:
 
 ```text
 [c=orange]● 2[/c]\t[b]claude[/b]\t[c=orange]needs login[/c]\tlogin expired\n[c=red]✗ 1[/c]\t[b]codex[/b]\t[c=orange]needs approval[/c]\tapply patch\n[c=green]✓ 1[/c]\t[b]opencode[/b]\t[c=red]failed[/c]\trate limited\n[c=#55ccff]» 2[/c]\t[b]claude[/b]\t[c=green]done[/c]\t\n\t[b]+2 more[/b]\t[c=#55ccff]working[/c]\tsee inbox
@@ -268,15 +268,15 @@ code under test.
 - Idle: with gutter, without gutter, idle template of seven lines, blank.
 - Values with tab, `|`, `\t`, markup add no cell and no row.
 - `segments` and compact output unchanged (existing goldens).
-- `tests/cli.rs`: `apply-zellij` with `OPENDECK_STRIP_ZJSB_LAYOUT=lines` writes
+- `tests/cli.rs`: `apply-zellij` with `OPENDECK_STRIP_ZJSE_LAYOUT=lines` writes
   a `strip` holding real tabs and newlines and `strip_mode = "raw"`.
 
 ## T5: docs and previews
 
 - `docs/status-format.md`: tab columns (when they apply, cells, alignment,
-  truncation), `zjsb_layout` under "Following zj-strip-bridge", the row limit
+  truncation), `zjse_layout` under "Following zj-status-export", the row limit
   and the per-row budget.
-- `README.md`: `column_gap` and `zjsb_layout` in the table and the commented
+- `README.md`: `column_gap` and `zjse_layout` in the table and the commented
   config block, template meaning in `lines`, example count 29, and the break:
   tabs in an unsegmented strip now make columns, `watch` output included.
 - `examples/config.toml`: both keys, commented out.
@@ -309,7 +309,7 @@ orchestrator:
 1. Runs fmt, clippy and tests on `LineLayout`.
 2. Renders and looks at the frames itself:
    `OPENDECK_STRIP_CONFIG=/dev/null target/release/opendeck-strip raw-string
-   "$(cargo run -q --example zjsb_preview -- lines-busy)" --out
+   "$(cargo run -q --example zjse_preview -- lines-busy)" --out
    <scratchpad>/lines-busy.png`.
 3. Reports to the user: commits, test count, the rendered image, deviations from
    the design, and what is unverified.

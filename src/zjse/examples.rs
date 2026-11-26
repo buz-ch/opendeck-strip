@@ -1,5 +1,5 @@
-//! The preview examples of `tests/zjsb/examples.toml`: one manifest for the
-//! parity test and the `zjsb_preview` example. Each names a scenario document
+//! The preview examples of `tests/zjse/examples.toml`: one manifest for the
+//! parity test and the `zjse_preview` example. Each names a scenario document
 //! and the renderer keys it overrides.
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -13,14 +13,14 @@ use super::{Options, render};
 pub const NOW_MS: u64 = 1_800_000_000_000;
 
 pub fn dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/zjsb")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/zjse")
 }
 
 #[derive(Clone, Debug)]
 pub struct Example {
     pub name: String,
     pub scenario: String,
-    /// `zjsb_*` key to value.
+    /// `zjse_*` key to value.
     pub overrides: BTreeMap<String, toml::Value>,
 }
 
@@ -85,8 +85,8 @@ impl Example {
     /// is shown as one line, its newlines written `\\n`.
     pub fn overrides_toml(&self) -> Vec<String> {
         let rank = |k: &str| match k {
-            "zjsb_mode" => 0,
-            "zjsb_slot" => 1,
+            "zjse_mode" => 0,
+            "zjse_slot" => 1,
             _ => 2,
         };
         let mut keys: Vec<_> = self.overrides.iter().collect();
@@ -114,21 +114,21 @@ fn apply(c: &mut Config, key: &str, v: &toml::Value) -> Result<(), String> {
             .ok_or_else(|| format!("{key} = {v} is not a non-empty string"))
     };
     match key {
-        "zjsb_mode" => c.zjsb_mode = text()?,
-        "zjsb_layout" => c.zjsb_layout = text()?,
-        "zjsb_slot" => c.zjsb_slot = text()?,
-        "zjsb_entry_template" => c.zjsb_entry_template = text()?,
-        "zjsb_counts_template" => c.zjsb_counts_template = text()?,
-        "zjsb_more_template" => c.zjsb_more_template = text()?,
-        "zjsb_compact_template" => c.zjsb_compact_template = text()?,
-        "zjsb_idle_template" => c.zjsb_idle_template = text()?,
-        "zjsb_blank_when_idle" => {
-            c.zjsb_blank_when_idle = v
+        "zjse_mode" => c.zjse_mode = text()?,
+        "zjse_layout" => c.zjse_layout = text()?,
+        "zjse_slot" => c.zjse_slot = text()?,
+        "zjse_entry_template" => c.zjse_entry_template = text()?,
+        "zjse_counts_template" => c.zjse_counts_template = text()?,
+        "zjse_more_template" => c.zjse_more_template = text()?,
+        "zjse_compact_template" => c.zjse_compact_template = text()?,
+        "zjse_idle_template" => c.zjse_idle_template = text()?,
+        "zjse_blank_when_idle" => {
+            c.zjse_blank_when_idle = v
                 .as_bool()
                 .ok_or_else(|| format!("{key} = {v} is not a boolean"))?
         }
-        "zjsb_min_interval_ms" => {
-            c.zjsb_min_interval_ms = v
+        "zjse_min_interval_ms" => {
+            c.zjse_min_interval_ms = v
                 .as_integer()
                 .filter(|n| *n > 0)
                 .ok_or_else(|| format!("{key} = {v} is not a number above 0"))?

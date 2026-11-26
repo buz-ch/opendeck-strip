@@ -773,14 +773,14 @@ fn options_come_from_the_config() {
     let c = Config::default();
     assert_eq!(Options::from_config(&c), Options::default());
     let mut c = Config {
-        zjsb_mode: "compact".into(),
-        zjsb_slot: "key2_3".into(),
-        zjsb_blank_when_idle: true,
-        zjsb_entry_template: "{marker} {app}".into(),
-        zjsb_compact_template: "{needs_you}/{total} {state}".into(),
-        zjsb_counts_template: "N{needs_you}".into(),
-        zjsb_more_template: "{hidden}".into(),
-        zjsb_idle_template: "quiet {total}".into(),
+        zjse_mode: "compact".into(),
+        zjse_slot: "key2_3".into(),
+        zjse_blank_when_idle: true,
+        zjse_entry_template: "{marker} {app}".into(),
+        zjse_compact_template: "{needs_you}/{total} {state}".into(),
+        zjse_counts_template: "N{needs_you}".into(),
+        zjse_more_template: "{hidden}".into(),
+        zjse_idle_template: "quiet {total}".into(),
         ..Config::default()
     };
     let o = Options::from_config(&c);
@@ -798,27 +798,27 @@ fn options_come_from_the_config() {
     assert!(text(&doc(many), &strip).unwrap().ends_with("|4"));
     assert_eq!(text(&doc(vec![]), &strip).as_deref(), Some("quiet 0"));
     // A template that does not parse keeps the default for that slot only.
-    c.zjsb_entry_template = "{bogus}".into();
-    c.zjsb_counts_template = "N{needs_you}|".into();
+    c.zjse_entry_template = "{bogus}".into();
+    c.zjse_counts_template = "N{needs_you}|".into();
     let o = Options::from_config(&c);
     assert_eq!(o.entry, Options::default().entry);
     assert_eq!(o.counts, Options::default().counts);
-    c.zjsb_mode = "strip".into();
-    c.zjsb_slot = "dial9".into();
+    c.zjse_mode = "strip".into();
+    c.zjse_slot = "dial9".into();
     let o = Options::from_config(&c);
     let d = Template::parse("{needs_you}/{total} {state}", &with_counts(ENTRY_FIELDS)).unwrap();
     assert_eq!((o.mode, o.slot, o.compact), (Mode::Strip, None, d));
     // Each template accepts only its own fields.
     let mut c = Config {
-        zjsb_idle_template: "{app}".into(),
+        zjse_idle_template: "{app}".into(),
         ..Config::default()
     };
     assert_eq!(Options::from_config(&c).idle, Options::default().idle);
     // Valid ones are kept, whatever the other keys hold.
-    c.zjsb_idle_template = "quiet".into();
-    c.zjsb_counts_template = "{hidden}".into();
-    c.zjsb_more_template = "{app}".into();
-    c.zjsb_compact_template = "{hidden}".into();
+    c.zjse_idle_template = "quiet".into();
+    c.zjse_counts_template = "{hidden}".into();
+    c.zjse_more_template = "{app}".into();
+    c.zjse_compact_template = "{hidden}".into();
     let o = Options::from_config(&c);
     assert_ne!(o.idle, Options::default().idle);
     assert_eq!(
@@ -829,9 +829,9 @@ fn options_come_from_the_config() {
             Options::default().compact
         )
     );
-    c.zjsb_entry_template = "{tab_name}".into();
+    c.zjse_entry_template = "{tab_name}".into();
     assert_ne!(Options::from_config(&c).entry, Options::default().entry);
-    c.zjsb_more_template = "{hidden} {needs_you}".into();
+    c.zjse_more_template = "{hidden} {needs_you}".into();
     assert_ne!(Options::from_config(&c).more, Options::default().more);
 }
 
@@ -842,7 +842,7 @@ fn the_examples_apply_their_keys_to_the_defaults() {
     let by = |name: &str| all.iter().find(|e| e.name == name).cloned().unwrap();
     let e = by("default-mixed");
     assert!(e.overrides.is_empty());
-    assert_eq!(e.config().unwrap().zjsb_mode, "strip");
+    assert_eq!(e.config().unwrap().zjse_mode, "strip");
     assert_eq!(
         by("default-mixed").document().unwrap().sessions[0]
             .panes
@@ -854,7 +854,7 @@ fn the_examples_apply_their_keys_to_the_defaults() {
     let o = Options::from_config(&c);
     assert_eq!((o.mode, o.slot.as_deref()), (Mode::Compact, Some("dial1")));
     assert_eq!(
-        c.zjsb_compact_template,
+        c.zjse_compact_template,
         "{marker} {count} [c=grey]{age}[/c]\n[b]{app|title:10}[/b]\n{state_label}"
     );
     let want =
@@ -864,7 +864,7 @@ fn the_examples_apply_their_keys_to_the_defaults() {
     for name in ["lines-agents", "lines-busy"] {
         let e = by(name);
         let c = e.config().unwrap();
-        assert_eq!(c.zjsb_layout, "lines");
+        assert_eq!(c.zjse_layout, "lines");
         assert_eq!(Options::from_config(&c).layout, Layout::Lines);
         let want =
             std::fs::read_to_string(examples::dir().join("expected").join(format!("{name}.txt")))
@@ -889,48 +889,48 @@ fn the_examples_apply_their_keys_to_the_defaults() {
         "x: nope is not a renderer key"
     );
     assert!(
-        err(ex(vec![("zjsb_slot", 1.into())])).contains("zjsb_slot = 1 is not a non-empty string")
+        err(ex(vec![("zjse_slot", 1.into())])).contains("zjse_slot = 1 is not a non-empty string")
     );
-    assert!(err(ex(vec![("zjsb_blank_when_idle", "yes".into())])).contains("is not a boolean"));
-    assert!(err(ex(vec![("zjsb_min_interval_ms", 0.into())])).contains("is not a number above 0"));
+    assert!(err(ex(vec![("zjse_blank_when_idle", "yes".into())])).contains("is not a boolean"));
+    assert!(err(ex(vec![("zjse_min_interval_ms", 0.into())])).contains("is not a number above 0"));
     let e = ex(vec![
-        ("zjsb_min_interval_ms", 250.into()),
-        ("zjsb_blank_when_idle", true.into()),
-        ("zjsb_idle_template", "q".into()),
+        ("zjse_min_interval_ms", 250.into()),
+        ("zjse_blank_when_idle", true.into()),
+        ("zjse_idle_template", "q".into()),
     ]);
     let c = e.config().unwrap();
     assert_eq!(
         (
-            c.zjsb_min_interval_ms,
-            c.zjsb_blank_when_idle,
-            c.zjsb_idle_template.as_str()
+            c.zjse_min_interval_ms,
+            c.zjse_blank_when_idle,
+            c.zjse_idle_template.as_str()
         ),
         (250, true, "q")
     );
     assert_eq!(
         e.overrides_toml(),
         [
-            "zjsb_blank_when_idle = true",
-            "zjsb_idle_template = \"q\"",
-            "zjsb_min_interval_ms = 250"
+            "zjse_blank_when_idle = true",
+            "zjse_idle_template = \"q\"",
+            "zjse_min_interval_ms = 250"
         ]
     );
     // Mode and slot lead; a template is one line with `\\n`, quotes and backslashes escaped.
     let e = ex(vec![
-        ("zjsb_compact_template", "{a}\n[b]\"q\"[/b]".into()),
-        ("zjsb_mode", "compact".into()),
+        ("zjse_compact_template", "{a}\n[b]\"q\"[/b]".into()),
+        ("zjse_mode", "compact".into()),
     ]);
     assert_eq!(
         e.overrides_toml(),
         [
-            "zjsb_mode = \"compact\"",
-            "zjsb_compact_template = \"{a}\\n[b]\\\"q\\\"[/b]\""
+            "zjse_mode = \"compact\"",
+            "zjse_compact_template = \"{a}\\n[b]\\\"q\\\"[/b]\""
         ]
     );
     // The line is TOML for the same value.
     let back: toml::Value = toml::from_str(&e.overrides_toml()[1]).unwrap();
     assert_eq!(
-        back["zjsb_compact_template"].as_str(),
+        back["zjse_compact_template"].as_str(),
         Some("{a}\n[b]\"q\"[/b]")
     );
 }
@@ -1258,15 +1258,15 @@ fn lines_values_cannot_add_cells_or_rows() {
 fn the_lines_layout_is_selected_by_the_config() {
     assert_eq!(Options::default().layout, Layout::Segments);
     let c = Config {
-        zjsb_layout: "lines".into(),
+        zjse_layout: "lines".into(),
         ..Config::default()
     };
     assert_eq!(Options::from_config(&c).layout, Layout::Lines);
     // Compact mode ignores the layout.
     let c = Config {
-        zjsb_mode: "compact".into(),
-        zjsb_slot: "dial1".into(),
-        zjsb_layout: "lines".into(),
+        zjse_mode: "compact".into(),
+        zjse_slot: "dial1".into(),
+        zjse_layout: "lines".into(),
         ..Config::default()
     };
     let o = Options::from_config(&c);
