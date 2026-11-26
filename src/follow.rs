@@ -246,7 +246,9 @@ fn spawn(zellij: &Path, session: &str, view: View) -> Result<Child> {
     if let Some(stderr) = child.stderr.take() {
         thread::spawn(move || {
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                log::debug!("zellij: {line}");
+                // zellij reports a missing session, a missing plugin and plugin
+                // errors here; debug would hide them at the default level.
+                log::warn!("zellij: {line}");
             }
         });
     }

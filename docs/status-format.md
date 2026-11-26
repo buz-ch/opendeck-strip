@@ -372,7 +372,7 @@ opendeck-strip follow-zellij [--session NAME] [--zellij BIN] [--stall-secs N] [-
 | `--once` | off | Read until the first end of stream, then exit: 0 if a write happened, 1 if none was |
 | `--view` | `state` | `state`: complete documents rendered here; `deck`: legacy frames |
 
-Without `--session` the session is resolved on every connection attempt: `$ZELLIJ_SESSION_NAME` when it appears in `zellij list-sessions --no-formatting`, otherwise the first live line. Lines containing `(EXITED - attach to resurrect)` are dead sessions. A session given with `--session` is connected to by that name but is still checked against the same list on every attempt: when it is not live, `follow-zellij` waits for it and clears the owned slots after `--grace-secs`, as for any other session. When the sessions cannot be listed at all, it logs a warning and retries; it neither connects a session it would have had to guess nor clears.
+Without `--session` the session is resolved on every connection attempt: `$ZELLIJ_SESSION_NAME` when it appears in `zellij list-sessions --no-formatting`, otherwise the first live line. Lines containing `(EXITED - attach to resurrect)` are dead sessions. The first live session is not necessarily the one that runs `zj-strip-bridge`; with several sessions, pin the one that has the plugin. A session given with `--session` is connected to by that name but is still checked against the same list on every attempt: when it is not live, `follow-zellij` waits for it and clears the owned slots after `--grace-secs`, as for any other session. Zellij's auto-generated session names change when a new session is created, so pin a session that is started with an explicit name. When the sessions cannot be listed at all, it logs a warning and retries; it neither connects a session it would have had to guess nor clears.
 
 `follow-zellij` runs `zellij --session S pipe --name zjsb.follow -a view=state start` (`view=deck` under `--view deck`) with the child's standard input held open and never written to. It reconnects when the process exits, stdout reaches end of file, or no line arrives for `--stall-secs`. On a state stream a `seq` gap is only a warning: each line is a complete document. The stall clock counts from the last line of any connection, not from the last connection, and is also checked between reconnects, so a producer that never sends a line is cleared after `--stall-secs` however quickly each connection ends. The owned slots (`strip` and `dial1` to `dial4`, or the compact slot from `zjsb_mode`/`zjsb_slot`) are cleared once per silent stretch, before `follow-zellij` reconnects; `--clear-on-exit` does the same on SIGTERM or SIGINT. A hard kill leaves the last render on the deck.
 
@@ -384,9 +384,16 @@ A systemd user unit is in [`examples/opendeck-strip-follow-zellij.service`](../e
 
 ```ini
 [Service]
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/.cargo/bin/opendeck-strip follow-zellij --clear-on-exit
 Restart=on-failure
 ```
+
+`follow-zellij` runs `zellij` by name, resolved against the unit's `PATH`. A
+user unit does not inherit the login shell's `PATH`, so a zellij installed in
+`~/.local/bin` is invisible without the `Environment=` line above; the follower
+then logs `cannot list zellij sessions: cannot run zellij: No such file or
+directory` and never connects.
 
 ### Frame format (legacy)
 

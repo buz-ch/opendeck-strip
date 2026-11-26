@@ -183,6 +183,10 @@ opendeck-strip doctor
 
 `follow-zellij` shows the deck served by `zj-strip-bridge` over `zellij pipe`. It resolves a live Zellij session, starts `zellij --session S pipe --name zjsb.follow -a view=state start`, renders each document with the `zjsb_*` settings below, writes the status file, and reconnects after a stall or a session restart. `--session NAME` pins a session, `--clear-on-exit` blanks the slots the renderer owns on SIGTERM or SIGINT, and `--once` stops after the first stream (exit 0 if a write happened, else 1). `apply-zellij` is the same reader and renderer without the supervisor; it takes the stream on standard input.
 
+Run from a systemd user unit, `follow-zellij` finds `zellij` through the unit's `PATH`, not your shell's. The example unit puts `~/.local/bin` on that `PATH`; without it a zellij installed there is not found, and the log repeats `cannot list zellij sessions` instead of reconnecting.
+
+Without `--session`, `follow-zellij` uses the oldest live session. If `zj-strip-bridge` runs in only one session, pin that one; an auto-generated session name changes when a new session is created, so start the pinned session with an explicit name (`zellij -s work`).
+
 `--view` selects the stream: `state` (the default) reads complete version 2 documents and renders them here; `deck` is the legacy reader for deck frames from an older `pipe`-branch plugin. The new `data-only` plugin refuses `view=deck` with `unknown view`.
 
 ```sh

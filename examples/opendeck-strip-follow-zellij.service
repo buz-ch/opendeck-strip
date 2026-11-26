@@ -6,8 +6,10 @@
 #   systemctl --user daemon-reload
 #   systemctl --user enable --now opendeck-strip-follow-zellij.service
 #
-# `follow-zellij` connects to the first live Zellij session. Add
-# `--session NAME` to pin one. Adjust ExecStart to the installed binary.
+# `follow-zellij` connects to the first live Zellij session. When the bridge
+# plugin runs in only one session, pin it with `--session NAME` and give it a
+# stable name (`zellij -s work`); an auto-generated name changes with the next
+# new session. Adjust ExecStart to the installed binary.
 
 [Unit]
 Description=Follow the zj-strip-bridge deck for opendeck-strip
@@ -15,6 +17,11 @@ After=graphical-session.target
 
 [Service]
 Type=simple
+# A user unit does not inherit the login shell's PATH. zellij usually lives in
+# ~/.local/bin and a `cargo install` binary in ~/.cargo/bin; without this, the
+# follower cannot find zellij and keeps logging "cannot list zellij sessions".
+# Adjust the list if zellij or the binary is installed elsewhere.
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/.cargo/bin/opendeck-strip follow-zellij --clear-on-exit
 Restart=on-failure
 RestartSec=5
