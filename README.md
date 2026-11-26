@@ -187,13 +187,10 @@ Run from a systemd user unit, `follow-zellij` finds `zellij` through the unit's 
 
 Without `--session`, `follow-zellij` uses the oldest live session. If `zj-status-export` runs in only one session, pin that one; an auto-generated session name changes when a new session is created, so start the pinned session with an explicit name (`zellij -s work`).
 
-`--view` selects the stream: `state` (the default) reads complete version 2 documents and renders them here; `deck` is the legacy reader for deck frames from an older `pipe`-branch plugin. The new `data-only` plugin refuses `view=deck` with `unknown view`.
-
 ```sh
 opendeck-strip follow-zellij
 opendeck-strip follow-zellij --session work --clear-on-exit
 (printf 'start\n'; cat) | zellij --session work pipe --name zj-status-export.follow | opendeck-strip apply-zellij
-opendeck-strip apply-zellij --view deck < recorded-frames.ndjson
 ```
 
 A systemd user unit is in `examples/opendeck-strip-follow-zellij.service` (`follow-zellij --clear-on-exit`). The document, renderer, exit codes and reconnect rules are documented in [docs/status-format.md](docs/status-format.md#following-zj-status-export).
@@ -396,6 +393,8 @@ With `zjse_layout = "lines"` the templates change meaning: each line of `zjse_co
 ### Migrating from the plugin
 
 The plugin's `mode`, `slot`, `blank_when_idle`, `min_interval_ms` and five template keys move here as `zjse_mode`, `zjse_slot`, `zjse_blank_when_idle`, `zjse_min_interval_ms` and the five `zjse_*_template` keys. `output`, `bin` and the plugin-side templates are gone. A KDL `\\n` becomes a real newline in a TOML `"""…"""` string, and `\"` becomes `"`. Because the strip is now rendered from the document, `export_peers false` thins the strip as well as `entries.json`; the default `true` keeps the merged deck of every session. The two stream commands are now `apply-zellij` and `follow-zellij` (no `apply`/`follow` aliases); the unit is `examples/opendeck-strip-follow-zellij.service`.
+
+Old `zjsb_*` config keys and `OPENDECK_STRIP_ZJSB_*` variables are not read; rename them to `zjse_*` and `OPENDECK_STRIP_ZJSE_*`.
 
 ### Segment font sizes
 

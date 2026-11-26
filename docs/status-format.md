@@ -266,7 +266,7 @@ Strip with segments and a non-default mode:
 
 `zj-status-export` serves its data over `zellij pipe`. `opendeck-strip apply-zellij` reads that stream and renders it into the status file; `opendeck-strip follow-zellij` starts it, renders the same way and reconnects.
 
-`follow-zellij` and `apply-zellij` read `zellij … pipe --name zj-status-export.follow` with `view=state` by default. `--view state|deck` selects the reader: `state` reads the complete version 2 documents of the current plugin; `deck` is the legacy reader for deck frames from an older `pipe`-branch plugin (see "Frame format" below). The `data-only` plugin refuses `view=deck` with `unknown view`.
+`follow-zellij` and `apply-zellij` read `zellij … pipe --name zj-status-export.follow` with `view=state`: complete version 2 documents.
 
 ### Rendering the document
 
@@ -335,13 +335,11 @@ Reads a `view=state` stream on standard input, renders each document and applies
 
 ```sh
 (printf 'start\n'; cat) | zellij --session work pipe --name zj-status-export.follow | opendeck-strip apply-zellij
-opendeck-strip apply-zellij --view deck < recorded-deck-frames.ndjson
 ```
 
-- `--view state` (default) reads documents; `--view deck` reads the legacy deck frames described below.
-- `hello` is logged; `ping` and unknown types are ignored on either stream, and a `state` line in a deck stream is ignored. An `error` line is logged.
-- A line that is not valid JSON, a state line without a numeric `v` or a valid `doc`, and a deck line without a numeric `v` are logged and skipped. A `v` above the version this build knows stops with exit 2.
-- `seq` is checked from `hello` (`seq` 0). A gap, a repeated number or an unparsable line is a warning; the lines after it are applied as what they declare. A state line is complete, so a gap loses nothing; a deck delta cannot rebuild lost state. Restart the stream to get a fresh full frame.
+- `hello` is logged; `ping` and unknown types are ignored. An `error` line is logged.
+- A line that is not valid JSON, and a state line without a numeric `v` or a valid `doc` are logged and skipped. A `v` above the version this build knows stops with exit 2.
+- `seq` is checked from `hello` (`seq` 0). A gap, a repeated number or an unparsable line is a warning; a state line is complete, so a gap loses nothing.
 - `--idle-clear SECS` removes the owned slots when no line, `ping` included, arrived for that long. It clears once per silent stretch and keeps reading; the next line re-arms it. It is off by default for `apply-zellij`.
 
 Exit codes:
@@ -358,7 +356,7 @@ Supervises the pipe and renders and applies the same stream.
 
 ```sh
 opendeck-strip follow-zellij [--session NAME] [--zellij BIN] [--stall-secs N] [--retry-secs MIN,MAX]
-                      [--grace-secs N] [--clear-on-exit] [--once] [--view state|deck]
+                      [--grace-secs N] [--clear-on-exit] [--once]
 ```
 
 | Option | Default | Meaning |
@@ -370,11 +368,10 @@ opendeck-strip follow-zellij [--session NAME] [--zellij BIN] [--stall-secs N] [-
 | `--grace-secs` | 10 | Clear the owned slots after no session was live for this long |
 | `--clear-on-exit` | off | Clear the owned slots on SIGTERM or SIGINT |
 | `--once` | off | Read until the first end of stream, then exit: 0 if a write happened, 1 if none was |
-| `--view` | `state` | `state`: complete documents rendered here; `deck`: legacy frames |
 
 Without `--session` the session is resolved on every connection attempt: `$ZELLIJ_SESSION_NAME` when it appears in `zellij list-sessions --no-formatting`, otherwise the first live line. Lines containing `(EXITED - attach to resurrect)` are dead sessions. The first live session is not necessarily the one that runs `zj-status-export`; with several sessions, pin the one that has the plugin. A session given with `--session` is connected to by that name but is still checked against the same list on every attempt: when it is not live, `follow-zellij` waits for it and clears the owned slots after `--grace-secs`, as for any other session. Zellij's auto-generated session names change when a new session is created, so pin a session that is started with an explicit name. When the sessions cannot be listed at all, it logs a warning and retries; it neither connects a session it would have had to guess nor clears.
 
-`follow-zellij` runs `zellij --session S pipe --name zj-status-export.follow -a view=state start` (`view=deck` under `--view deck`) with the child's standard input held open and never written to. It reconnects when the process exits, stdout reaches end of file, or no line arrives for `--stall-secs`. On a state stream a `seq` gap is only a warning: each line is a complete document. The stall clock counts from the last line of any connection, not from the last connection, and is also checked between reconnects, so a producer that never sends a line is cleared after `--stall-secs` however quickly each connection ends. The owned slots (`strip` and `dial1` to `dial4`, or the compact slot from `zjse_mode`/`zjse_slot`) are cleared once per silent stretch, before `follow-zellij` reconnects; `--clear-on-exit` does the same on SIGTERM or SIGINT. A hard kill leaves the last render on the deck.
+`follow-zellij` runs `zellij --session S pipe --name zj-status-export.follow -a view=state start` with the child's standard input held open and never written to. It reconnects when the process exits, stdout reaches end of file, or no line arrives for `--stall-secs`. A `seq` gap is only a warning: each line is a complete document. The stall clock counts from the last line of any connection, not from the last connection, and is also checked between reconnects, so a producer that never sends a line is cleared after `--stall-secs` however quickly each connection ends. The owned slots (`strip` and `dial1` to `dial4`, or the compact slot from `zjse_mode`/`zjse_slot`) are cleared once per silent stretch, before `follow-zellij` reconnects; `--clear-on-exit` does the same on SIGTERM or SIGINT. A hard kill leaves the last render on the deck.
 
 `follow-zellij` exits with 0 on SIGTERM or SIGINT, with 1 when the stream could not be read and, under `--once`, when nothing was written or no session was live, and with 2 on a line with a higher `v`. `--idle-clear` and `--stall-secs` must be at least 1; 0 is a usage error (exit 2).
 
@@ -395,29 +392,13 @@ user unit does not inherit the login shell's `PATH`, so a zellij installed in
 then logs `cannot list zellij sessions: cannot run zellij: No such file or
 directory` and never connects.
 
-### Frame format (legacy)
+### Stream lines
 
-The deck frames described here belong to the older `pipe`-branch plugin and are only parsed with `--view deck`. A current `zj-status-export` (`data-only`) answers `view=deck` with `unknown view`.
-
-Every line is one JSON object with `"v": 1` and `"type"`. `seq` starts at 0 for `hello` and increases by one per line of a connection; a reconnect starts at 0 again. A skipped or repeated number means a line was lost. A delta cannot rebuild what was lost, and a delta played as full would delete every owned slot it does not set, so `follow-zellij --view deck` ends the connection on a gap without applying that frame and reconnects, where the first frame is full; `apply-zellij --view deck` warns and applies the numbered lines as what they declare.
+Every line is one JSON object with `"v": 1` and `"type"`. `seq` starts at 0 for `hello` and increases by one per line of a connection; a reconnect starts at 0 again.
 
 ```json
-{"v":1,"type":"hello","plugin":"zj-status-export","version":"0.0.1","session":"work","view":"deck","seq":0}
-{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"<markup>"},"settings":{"strip_mode":"raw"},"clear":[],"owned":["strip","dial1","dial2","dial3","dial4"]}
-{"v":1,"type":"deck","seq":2,"full":false,"set":{"strip":"<markup>"},"settings":{},"clear":[]}
-{"v":1,"type":"state","seq":3,"doc":{ ...version 2 document... }}
-{"v":1,"type":"ping","seq":4}
+{"v":1,"type":"hello","plugin":"zj-status-export","version":"0.0.1","session":"work","view":"state","seq":0}
+{"v":1,"type":"state","seq":1,"doc":{ ...version 2 document... }}
+{"v":1,"type":"ping","seq":2}
 {"v":1,"type":"error","error":"unknown pipe"}
 ```
-
-Deck fields:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `full` | boolean | The deck must equal this frame; remove owned slots not in `set`. Absent means `false`; any other type makes the line skipped |
-| `set` | object | Slot values in the `set` syntax |
-| `settings` | object | Typed top-level keys: `strip_mode` string, `strip_gap` number, `labels` boolean |
-| `clear` | array of strings | Slots to remove with `clear` semantics |
-| `owned` | array of strings | Slots the plugin owns: `strip` and `dial1` to `dial4`, or the compact slot. Only sent with a full frame |
-
-In a deck stream a `state` line is ignored. In a state stream `deck` is unknown and ignored.

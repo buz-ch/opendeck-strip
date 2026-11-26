@@ -22,7 +22,7 @@ use crate::render::{Detail, Renderer, continuous_preview, raw_frame, tiles_previ
 use crate::sizetest;
 use crate::status::{self, SlotValue, Status, StripMode, parse_bool};
 use crate::striptest;
-use crate::writer::{self, Handler, View};
+use crate::writer::{self, StateHandler};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -65,9 +65,6 @@ enum Commands {
         /// Clear the owned slots if no line arrives for this many seconds
         #[arg(long, value_parser = positive_secs)]
         idle_clear: Option<u64>,
-        /// `state`: complete documents rendered here (default); `deck`: legacy frames
-        #[arg(long, value_enum, default_value_t = View::State)]
-        view: View,
     },
     /// Follow the zj-status-export stream of a Zellij session and apply it
     #[command(name = "follow-zellij")]
@@ -93,9 +90,6 @@ enum Commands {
         /// Read until the first end of stream, then exit (0 if a status write happened, else 1)
         #[arg(long)]
         once: bool,
-        /// `state`: complete documents rendered here (default); `deck`: legacy frames
-        #[arg(long, value_enum, default_value_t = View::State)]
-        view: View,
     },
     /// Print the status file path this shell would use
     Where,
@@ -230,7 +224,7 @@ pub fn run() -> Result<i32> {
             clear(&slots)?;
             Ok(0)
         }
-        Commands::Apply { idle_clear, view } => apply(idle_clear.map(Duration::from_secs), view),
+        Commands::Apply { idle_clear } => apply(idle_clear.map(Duration::from_secs)),
         Commands::Follow {
             session,
             zellij,
@@ -239,7 +233,6 @@ pub fn run() -> Result<i32> {
             grace_secs,
             clear_on_exit,
             once,
-            view,
         } => crate::follow::run(crate::follow::Options {
             session,
             zellij: zellij.unwrap_or_else(|| PathBuf::from("zellij")),
@@ -248,7 +241,6 @@ pub fn run() -> Result<i32> {
             grace: Duration::from_secs(grace_secs),
             clear_on_exit,
             once,
-            view,
         }),
         Commands::Where => {
             println!("{}", status::status_path().display());
@@ -532,29 +524,11 @@ pub(crate) fn apply_set(status: &mut Status, key: &str, raw: &str, plain: bool) 
     }
 }
 
-pub(crate) fn apply_slot(status: &mut Status, key: &str, value: SlotValue) {
+fn apply_slot(status: &mut Status, key: &str, value: SlotValue) {
     if status::SlotName::parse(key).is_none() && key != "strip" {
         log::warn!("unknown slot {key}; storing it anyway");
     }
     status.set_slot(key, value);
-}
-
-/// Apply one typed settings value from a deck frame. Known keys go through the
-/// same conversion as `set`; unknown keys are stored as-is for forward compatibility.
-pub(crate) fn apply_setting(status: &mut Status, key: &str, value: &Value) {
-    let raw = match value {
-        Value::String(text) => text.clone(),
-        Value::Bool(flag) => flag.to_string(),
-        Value::Number(number) => number.to_string(),
-        _ => {
-            status.set_raw(key, value.clone());
-            return;
-        }
-    };
-    match key {
-        "labels" | "strip_mode" | "strip_gap" => apply_set(status, key, &raw, false),
-        _ => status.set_raw(key, value.clone()),
-    }
 }
 
 /// Remove one slot the way `clear` does: `strip` also removes the four dials.
@@ -633,13 +607,13 @@ fn positive_secs(text: &str) -> Result<u64, String> {
     }
 }
 
-fn apply(idle_clear: Option<Duration>, view: View) -> Result<i32> {
+fn apply(idle_clear: Option<Duration>) -> Result<i32> {
     let path = status::status_path();
     let config = Config::load();
-    let mut handler = writer::handler(view, &config, &path, OnGap::Warn);
+    let mut handler = StateHandler::new(&config, path.clone());
     let end = run_stream(
         io::stdin(),
-        &mut *handler,
+        &mut handler,
         idle_clear,
         OnIdle::Continue,
         None,
@@ -647,33 +621,19 @@ fn apply(idle_clear: Option<Duration>, view: View) -> Result<i32> {
     )?;
     Ok(match end {
         StreamEnd::TooOld => 2,
-        StreamEnd::Eof | StreamEnd::Stall | StreamEnd::Stopped | StreamEnd::SeqGap => 0,
+        StreamEnd::Eof | StreamEnd::Stall | StreamEnd::Stopped => 0,
     })
 }
 
 /// How a stream ends. `Stall` means the idle timeout fired; the caller decides
 /// whether that is an error (`follow-zellij` reconnects) or expected
 /// (`apply-zellij --idle-clear`).
-/// `SeqGap` means lines were lost, so only `follow-zellij` sees it: it reconnects, because
-/// the first frame of a connection is full.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StreamEnd {
     Eof,
     Stall,
-    SeqGap,
     TooOld,
     Stopped,
-}
-
-/// What a gap in `seq` means to a caller. A deck delta cannot rebuild what was
-/// lost, and treating one as full would delete owned slots, so neither caller
-/// does that. A state line is a whole document, so a gap loses nothing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum OnGap {
-    /// One stream only, or complete documents: warn and go on reading.
-    Warn,
-    /// `follow-zellij` ends the connection; the reconnect's first frame is full.
-    Resync,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -750,8 +710,8 @@ impl Stream {
     }
 }
 
-/// Apply lines from `reader` until end of input, a stall, a gap in `seq`, a
-/// newer protocol version or `stop`, handing each line to `handler`.
+/// Apply lines from `reader` until end of input, a stall, a newer protocol
+/// version or `stop`, handing each line to `handler`.
 ///
 /// The reader runs in its own thread so an idle timeout, a throttle deadline
 /// and the stop flag can be observed while a pipe or terminal is quiet.
@@ -760,7 +720,7 @@ impl Stream {
 /// without waiting out a long stall.
 pub(crate) fn run_stream<R: Read + Send + 'static>(
     reader: R,
-    handler: &mut dyn Handler,
+    handler: &mut StateHandler,
     idle: Option<Duration>,
     on_idle: OnIdle,
     stop: Option<&AtomicBool>,
@@ -791,7 +751,7 @@ pub(crate) fn run_stream<R: Read + Send + 'static>(
 
 fn run_lines(
     rx: mpsc::Receiver<io::Result<String>>,
-    handler: &mut dyn Handler,
+    handler: &mut StateHandler,
     idle: Option<Duration>,
     on_idle: OnIdle,
     stop: Option<&AtomicBool>,
@@ -867,10 +827,6 @@ fn run_lines(
         match handler.line(line, now, writer::epoch_ms())? {
             writer::LineOutcome::Continue => {}
             writer::LineOutcome::TooOld => return Ok(StreamEnd::TooOld),
-            writer::LineOutcome::SeqGap => {
-                handler.flush(now)?;
-                return Ok(StreamEnd::SeqGap);
-            }
         }
     }
 }
@@ -1184,23 +1140,12 @@ mod tests {
         assert!(matches!(
             command(&["apply-zellij", "--idle-clear", "5"]),
             Commands::Apply {
-                idle_clear: Some(5),
-                view: View::State,
+                idle_clear: Some(5)
             }
         ));
         assert!(matches!(
             command(&["apply-zellij"]),
-            Commands::Apply {
-                idle_clear: None,
-                view: View::State,
-            }
-        ));
-        assert!(matches!(
-            command(&["apply-zellij", "--view", "deck"]),
-            Commands::Apply {
-                idle_clear: None,
-                view: View::Deck,
-            }
+            Commands::Apply { idle_clear: None }
         ));
         match command(&["follow-zellij", "--session", "work", "--clear-on-exit"]) {
             Commands::Follow {
@@ -1211,7 +1156,6 @@ mod tests {
                 grace_secs,
                 clear_on_exit,
                 once,
-                view,
             } => {
                 assert_eq!(session.as_deref(), Some("work"));
                 assert_eq!(zellij, None);
@@ -1220,7 +1164,6 @@ mod tests {
                 assert_eq!(grace_secs, 10);
                 assert!(clear_on_exit);
                 assert!(!once);
-                assert_eq!(view, View::State);
             }
             other => panic!("unexpected {other:?}"),
         }
@@ -1244,8 +1187,7 @@ mod tests {
         assert!(matches!(
             command(&["apply-zellij", "--idle-clear", "1"]),
             Commands::Apply {
-                idle_clear: Some(1),
-                view: View::State,
+                idle_clear: Some(1)
             }
         ));
     }

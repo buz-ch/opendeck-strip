@@ -1,34 +1,23 @@
 //! The writer: a `zjse` state document in, status-file writes out.
 //!
 //! [`Writer`] holds the throttle, unchanged-text suppression and the owned
-//! slots, with the clock passed in so it is testable. [`StateHandler`] and
-//! [`DeckHandler`] adapt the two stream views to the shared line reader in
-//! `cli`; only the parsing and the payload differ.
+//! slots, with the clock passed in so it is testable. [`StateHandler`] adapts
+//! it to the line reader in `cli`.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::cli::{self, OnGap};
+use crate::cli;
 use crate::config::Config;
-use crate::frame::{self, ParseError};
+use crate::protocol::{self, ParseError};
 use crate::status::{self, Status};
 use crate::zjse::{
     self,
     document::{Document, Record},
 };
-
-/// Which stream `follow-zellij` and `apply-zellij` read.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
-pub enum View {
-    /// Complete documents; the default.
-    #[default]
-    State,
-    /// Deck frames; legacy, kept for one release.
-    Deck,
-}
 
 /// One `state` line: whether it carried a document, and its `seq`.
 pub struct StateLine {
@@ -46,7 +35,7 @@ pub fn parse_state_line(line: &str) -> Result<StateLine, ParseError> {
     };
     let seq = map.get("seq").and_then(Value::as_u64);
     let v = map.get("v").and_then(Value::as_u64);
-    if v.is_some_and(|v| v > frame::KNOWN_VERSION) {
+    if v.is_some_and(|v| v > protocol::KNOWN_VERSION) {
         return Err(ParseError::TooOld);
     }
     let none = StateLine { doc: None, seq };
@@ -319,36 +308,15 @@ impl Writer {
 /// What one stream line made the reader do.
 pub(crate) enum LineOutcome {
     Continue,
-    /// But the line was refused; the reader logs and stops.
+    /// The line was refused; the reader logs and stops.
     TooOld,
-    /// A deck `seq` gap the caller must resync on.
-    SeqGap,
 }
 
-/// One view's line handling, shared by `run_lines`.
-pub(crate) trait Handler {
-    fn owned(&self) -> &[String];
-    fn line(&mut self, line: &str, now: Instant, now_ms: u64) -> Result<LineOutcome>;
-    /// Called on every reader timeout tick, after an idle clear.
-    fn tick(&mut self, now: Instant) -> Result<()>;
-    /// Write any held frame; called when a stream ends.
-    fn flush(&mut self, now: Instant) -> Result<()>;
-    /// Status writes for `--once`.
-    fn applied(&self) -> usize;
-    fn deadline(&self) -> Option<Instant> {
-        None
-    }
-    /// The owned slots were cleared outside the handler.
-    fn cleared(&mut self) {}
-    /// A new connection starts numbering its lines at `hello` again.
-    fn reconnected(&mut self) {}
-}
-
-/// The `view=state` handler: each line is a complete document.
+/// Applies a `view=state` stream: each line is a complete document.
 pub(crate) struct StateHandler {
     path: PathBuf,
     writer: Writer,
-    seq: frame::Seq,
+    seq: protocol::Seq,
     /// The last logged document summary; only changes are logged.
     last_logged: Option<String>,
 }
@@ -358,24 +326,22 @@ impl StateHandler {
         Self {
             path,
             writer: Writer::new(config),
-            seq: frame::Seq::default(),
+            seq: protocol::Seq::default(),
             last_logged: None,
         }
     }
-}
 
-impl Handler for StateHandler {
-    fn owned(&self) -> &[String] {
+    pub fn owned(&self) -> &[String] {
         self.writer.owned()
     }
 
-    fn line(&mut self, line: &str, now: Instant, now_ms: u64) -> Result<LineOutcome> {
+    pub fn line(&mut self, line: &str, now: Instant, now_ms: u64) -> Result<LineOutcome> {
         let parsed = match parse_state_line(line) {
             Ok(parsed) => parsed,
             Err(ParseError::TooOld) => {
                 log::error!(
                     "state frame is newer than version {}; update opendeck-strip",
-                    frame::KNOWN_VERSION
+                    protocol::KNOWN_VERSION
                 );
                 return Ok(LineOutcome::TooOld);
             }
@@ -410,7 +376,8 @@ impl Handler for StateHandler {
         Ok(LineOutcome::Continue)
     }
 
-    fn tick(&mut self, now: Instant) -> Result<()> {
+    /// Called on every reader timeout tick, after an idle clear.
+    pub fn tick(&mut self, now: Instant) -> Result<()> {
         if !self.writer.pending_due(now) {
             return Ok(());
         }
@@ -421,7 +388,8 @@ impl Handler for StateHandler {
         Ok(())
     }
 
-    fn flush(&mut self, now: Instant) -> Result<()> {
+    /// Write any held frame; called when a stream ends.
+    pub fn flush(&mut self, now: Instant) -> Result<()> {
         if self.writer.deadline().is_none() {
             return Ok(());
         }
@@ -432,102 +400,23 @@ impl Handler for StateHandler {
         Ok(())
     }
 
-    fn applied(&self) -> usize {
+    /// Status writes for `--once`.
+    pub fn applied(&self) -> usize {
         self.writer.applied()
     }
 
-    fn deadline(&self) -> Option<Instant> {
+    pub fn deadline(&self) -> Option<Instant> {
         self.writer.deadline()
     }
 
-    fn cleared(&mut self) {
+    /// The owned slots were cleared outside the handler.
+    pub fn cleared(&mut self) {
         self.writer.cleared();
     }
 
-    fn reconnected(&mut self) {
+    pub fn reconnected(&mut self) {
         // Every connection numbers its lines from `hello` again.
-        self.seq = frame::Seq::default();
-    }
-}
-
-/// The `view=deck` handler: kept as today, including reconnect-on-gap.
-pub(crate) struct DeckHandler {
-    path: PathBuf,
-    owned: Vec<String>,
-    seq: frame::Seq,
-    frames: usize,
-    on_gap: OnGap,
-}
-
-impl DeckHandler {
-    pub fn new(on_gap: OnGap, path: PathBuf) -> Self {
-        Self {
-            path,
-            owned: Vec::new(),
-            seq: frame::Seq::default(),
-            frames: 0,
-            on_gap,
-        }
-    }
-}
-
-impl Handler for DeckHandler {
-    fn owned(&self) -> &[String] {
-        &self.owned
-    }
-
-    fn line(&mut self, line: &str, _now: Instant, _now_ms: u64) -> Result<LineOutcome> {
-        let (frame, seq) = match frame::parse_parts(line) {
-            Ok(parts) => parts,
-            Err(ParseError::TooOld) => {
-                log::error!(
-                    "deck frame is newer than version {}; update opendeck-strip",
-                    frame::KNOWN_VERSION
-                );
-                return Ok(LineOutcome::TooOld);
-            }
-            Err(ParseError::Skip) => {
-                log::warn!("skipping unparsable deck line: {}", clip(line));
-                self.seq.lost();
-                return Ok(LineOutcome::Continue);
-            }
-        };
-        if self.seq.check(seq) {
-            match self.on_gap {
-                OnGap::Warn => log::warn!(
-                    "deck stream skipped or repeated a seq (got {seq:?}); a frame may be lost until the next full one"
-                ),
-                OnGap::Resync => {
-                    log::warn!("deck stream skipped or repeated a seq (got {seq:?})");
-                    return Ok(LineOutcome::SeqGap);
-                }
-            }
-        }
-        let Some(frame) = frame else {
-            return Ok(LineOutcome::Continue);
-        };
-        if frame.full {
-            self.owned = frame.owned.clone();
-        }
-        status::update(&self.path, |status| frame::apply_frame(status, &frame))?;
-        self.frames += 1;
-        Ok(LineOutcome::Continue)
-    }
-
-    fn tick(&mut self, _now: Instant) -> Result<()> {
-        Ok(())
-    }
-
-    fn flush(&mut self, _now: Instant) -> Result<()> {
-        Ok(())
-    }
-
-    fn applied(&self) -> usize {
-        self.frames
-    }
-
-    fn reconnected(&mut self) {
-        self.seq = frame::Seq::default();
+        self.seq = protocol::Seq::default();
     }
 }
 
@@ -536,14 +425,6 @@ pub fn epoch_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64)
-}
-
-/// Build the handler for a view.
-pub(crate) fn handler(view: View, config: &Config, path: &Path, on_gap: OnGap) -> Box<dyn Handler> {
-    match view {
-        View::State => Box::new(StateHandler::new(config, path.to_owned())),
-        View::Deck => Box::new(DeckHandler::new(on_gap, path.to_owned())),
-    }
 }
 
 #[cfg(test)]

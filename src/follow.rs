@@ -1,5 +1,5 @@
 //! `follow-zellij`: supervise `zellij pipe --name zj-status-export.follow -a view=state` and apply
-//! the documents it carries; `--view deck` keeps the legacy frame reader.
+//! the documents it carries.
 //!
 //! The pipe stays open by holding the child's stdin open and passing a `start`
 //! payload, which is what makes `zellij pipe` invoke the plugin's `pipe()` at all.
@@ -15,10 +15,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 
-use crate::cli::{self, OnGap, OnIdle, StreamEnd};
+use crate::cli::{self, OnIdle, StreamEnd};
 use crate::config::Config;
 use crate::status;
-use crate::writer::{self, Handler, View};
+use crate::writer::StateHandler;
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -29,7 +29,6 @@ pub struct Options {
     pub grace: Duration,
     pub clear_on_exit: bool,
     pub once: bool,
-    pub view: View,
 }
 
 /// Parse `--retry-secs MIN,MAX`.
@@ -72,18 +71,14 @@ impl Liveness {
 pub fn run(options: Options) -> Result<i32> {
     let path = status::status_path();
     let config = Config::load();
-    let on_gap = match options.view {
-        View::State => OnGap::Warn,
-        View::Deck => OnGap::Resync,
-    };
-    let mut handler = writer::handler(options.view, &config, &path, on_gap);
+    let mut handler = StateHandler::new(&config, path.clone());
     let stop = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGINT, stop.clone())?;
     signal_hook::flag::register(signal_hook::consts::SIGTERM, stop.clone())?;
 
     let mut backoff = Backoff::new(options.retry.0, options.retry.1);
-    // One stream state for every connection: the idle clock and `seq` do not
-    // restart with a reconnect.
+    // One stream state for every connection: the idle clock does not restart
+    // with a reconnect.
     let mut stream = cli::Stream::new();
     let mut no_session_since: Option<Instant> = None;
     let mut cleared_for_outage = false;
@@ -120,7 +115,7 @@ pub fn run(options: Options) -> Result<i32> {
                     "no live zellij session; retrying in {:.0}s",
                     wait.as_secs_f64()
                 );
-                if wait_or_stop(wait, &stop, &path, &options, &mut *handler, &mut stream)? {
+                if wait_or_stop(wait, &stop, &path, &options, &mut handler, &mut stream)? {
                     finish(&path, &options, &stop, handler.owned())?;
                     return Ok(0);
                 }
@@ -130,7 +125,7 @@ pub fn run(options: Options) -> Result<i32> {
         no_session_since = None;
         cleared_for_outage = false;
 
-        let mut child = match spawn(&options.zellij, &session, options.view) {
+        let mut child = match spawn(&options.zellij, &session) {
             Ok(child) => child,
             Err(err) => {
                 if options.once {
@@ -141,7 +136,7 @@ pub fn run(options: Options) -> Result<i32> {
                     "cannot start zellij: {err:#}; retrying in {:.0}s",
                     wait.as_secs_f64()
                 );
-                if wait_or_stop(wait, &stop, &path, &options, &mut *handler, &mut stream)? {
+                if wait_or_stop(wait, &stop, &path, &options, &mut handler, &mut stream)? {
                     finish(&path, &options, &stop, handler.owned())?;
                     return Ok(0);
                 }
@@ -155,7 +150,7 @@ pub fn run(options: Options) -> Result<i32> {
         let stdout = child.stdout.take().expect("stdout is piped");
         let end = cli::run_stream(
             stdout,
-            &mut *handler,
+            &mut handler,
             Some(options.stall),
             OnIdle::Stop,
             Some(&stop),
@@ -175,7 +170,7 @@ pub fn run(options: Options) -> Result<i32> {
                 // Reconnect after a backoff rather than leaving a stale deck behind.
                 let wait = backoff.next();
                 log::info!("reconnecting in {:.0}s", wait.as_secs_f64());
-                if wait_or_stop(wait, &stop, &path, &options, &mut *handler, &mut stream)? {
+                if wait_or_stop(wait, &stop, &path, &options, &mut handler, &mut stream)? {
                     finish(&path, &options, &stop, handler.owned())?;
                     return Ok(0);
                 }
@@ -183,19 +178,18 @@ pub fn run(options: Options) -> Result<i32> {
             }
         };
         // A held state frame is written before a reconnect, never carried over.
-        if matches!(end, StreamEnd::Eof | StreamEnd::Stall | StreamEnd::SeqGap) {
+        if matches!(end, StreamEnd::Eof | StreamEnd::Stall) {
             handler.flush(Instant::now())?;
         }
         // Only a line proves the connection works; a child that fails at once
-        // keeps backing off. A connection lost to a `seq` gap is no proof either.
-        if stream.lines > lines_before && end != StreamEnd::SeqGap {
+        // keeps backing off.
+        if stream.lines > lines_before {
             backoff.reset();
         }
         match end {
             // The reason only; the next line says whether there is a reconnect.
             StreamEnd::Eof => log::info!("stream ended"),
             StreamEnd::Stall => log::info!("no line for {}s", options.stall.as_secs()),
-            StreamEnd::SeqGap => log::info!("stream lost lines"),
             StreamEnd::Stopped => {
                 finish(&path, &options, &stop, handler.owned())?;
                 return Ok(0);
@@ -207,7 +201,7 @@ pub fn run(options: Options) -> Result<i32> {
         }
         let wait = backoff.next();
         log::info!("reconnecting in {:.0}s", wait.as_secs_f64());
-        if wait_or_stop(wait, &stop, &path, &options, &mut *handler, &mut stream)? {
+        if wait_or_stop(wait, &stop, &path, &options, &mut handler, &mut stream)? {
             finish(&path, &options, &stop, handler.owned())?;
             return Ok(0);
         }
@@ -222,11 +216,7 @@ fn finish(path: &Path, options: &Options, stop: &AtomicBool, owned: &[String]) -
     Ok(())
 }
 
-fn spawn(zellij: &Path, session: &str, view: View) -> Result<Child> {
-    let view = match view {
-        View::State => "view=state",
-        View::Deck => "view=deck",
-    };
+fn spawn(zellij: &Path, session: &str) -> Result<Child> {
     let mut child = Command::new(zellij)
         .args([
             "--session",
@@ -235,7 +225,7 @@ fn spawn(zellij: &Path, session: &str, view: View) -> Result<Child> {
             "--name",
             "zj-status-export.follow",
             "-a",
-            view,
+            "view=state",
             "start",
         ])
         .stdin(Stdio::piped())
@@ -341,7 +331,7 @@ fn wait_or_stop(
     stop: &AtomicBool,
     path: &Path,
     options: &Options,
-    handler: &mut dyn Handler,
+    handler: &mut StateHandler,
     stream: &mut cli::Stream,
 ) -> Result<bool> {
     let deadline = Instant::now() + wait;

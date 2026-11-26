@@ -254,23 +254,6 @@ fn a_state_gap_is_no_reason_to_reconnect_and_keeps_rendering() {
     assert_eq!(env.status_json()["strip"], expected_default_strip());
 }
 
-#[test]
-fn the_deck_view_still_applies_a_deck_frame() {
-    let env = Env::new();
-    let input = concat!(
-        r#"{"v":1,"type":"hello","plugin":"zj-status-export","session":"work","view":"deck","seq":0}"#,
-        "\n",
-        r#"{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"D1"},"settings":{"strip_mode":"tiles"},"owned":["strip","dial1","dial2","dial3","dial4"]}"#,
-        "\n"
-    );
-    let output = env.run_stdin(["apply-zellij", "--view", "deck"], input);
-    assert!(output.status.success());
-    let status = env.status_json();
-    assert_eq!(status["strip"], "S");
-    assert_eq!(status["dial1"], "D1");
-    assert_eq!(status["strip_mode"], "tiles");
-}
-
 #[cfg(unix)]
 fn fake_zellij(env: &Env, stream: &str) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
@@ -288,7 +271,6 @@ case "$1" in
   --session)
     ok=
     for arg in "$@"; do
-      [ "$arg" = "view=deck" ] && { echo "deck view requested" >&2; exit 3; }
       [ "$arg" = "view=state" ] && ok=1
     done
     [ -n "$ok" ] || { echo "missing view=state" >&2; exit 3; }

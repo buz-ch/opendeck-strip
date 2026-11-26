@@ -172,7 +172,7 @@ fn slot_gone(value: &Value, slot: &str) -> bool {
 /// timeout has cleared the owned slots. The child's stdin is still open.
 fn apply_until_idle_clear(env: &Env, input: &str) -> std::process::Child {
     let mut child = env
-        .command(["apply-zellij", "--idle-clear", "1", "--view", "deck"])
+        .command(["apply-zellij", "--idle-clear", "1"])
         .stdin(std::process::Stdio::piped())
         .spawn()
         .expect("spawn apply");
@@ -182,10 +182,9 @@ fn apply_until_idle_clear(env: &Env, input: &str) -> std::process::Child {
         stdin.write_all(input.as_bytes()).unwrap();
         stdin.flush().unwrap();
     }
-    assert_eq!(
-        wait_for_slot(env, "strip", Duration::from_secs(5)).as_deref(),
-        Some("S"),
-        "the frame is applied before the idle timeout"
+    assert!(
+        wait_for_slot(env, "strip", Duration::from_secs(5)).is_some(),
+        "the state is applied before the idle timeout"
     );
     let cleared = wait_for_status(env, Duration::from_secs(8), |status| {
         slot_gone(status, "strip") && slot_gone(status, "dial1")
@@ -730,29 +729,10 @@ where
     child.wait_with_output().expect("wait for binary")
 }
 
-const FULL_FRAME: &str = concat!(
-    r#"{"v":1,"type":"hello","plugin":"zj-status-export","version":"0.1.0","session":"work","view":"deck","seq":0}"#,
-    "\n",
-    r#"{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"D1"},"settings":{"strip_mode":"tiles","labels":true,"strip_gap":12},"clear":[],"owned":["strip","dial1","dial2","dial3","dial4"]}"#,
-    "\n",
-    r#"{"v":1,"type":"deck","seq":2,"full":false,"set":{"dial2":"D2"},"settings":{},"clear":[]}"#,
-    "\n"
-);
-
-#[test]
-fn apply_applies_a_full_then_incremental_frame() {
-    let env = Env::new();
-    fs::write(&env.status, r#"{"key1_1":"K"}"#).unwrap();
-    let output = run_stdin(&env, ["apply-zellij", "--view", "deck"], FULL_FRAME);
-    assert!(output.status.success());
-    let status = env.status_json();
-    assert_eq!(status["strip"], "S");
-    assert_eq!(status["dial1"], "D1");
-    assert_eq!(status["dial2"], "D2");
-    assert_eq!(status["key1_1"], "K");
-    assert_eq!(status["strip_mode"], "tiles");
-    assert_eq!(status["labels"], Value::Bool(true));
-    assert_eq!(status["strip_gap"], Value::Number(12.into()));
+/// One `state` line with a document that puts something on the strip.
+fn state_line(seq: u64) -> String {
+    let doc: Value = serde_json::from_str(include_str!("zjse/scenarios/one-blocked.json")).unwrap();
+    serde_json::json!({"v": 1, "type": "state", "seq": seq, "doc": doc}).to_string()
 }
 
 #[test]
@@ -852,60 +832,16 @@ fn apply_zellij_lines_escapes_a_template_backslash() {
 }
 
 #[test]
-fn apply_clear_names_follow_clear_semantics() {
-    let env = Env::new();
-    fs::write(
-        &env.status,
-        r#"{"strip":"S","dial1":"a","dial2":"b","key1_1":"K"}"#,
-    )
-    .unwrap();
-
-    let frame = r#"{"v":1,"type":"deck","set":{},"clear":["strip"]}"#;
-    let output = run_stdin(&env, ["apply-zellij", "--view", "deck"], frame);
-    assert!(output.status.success());
-
-    let status = env.status_json();
-    for key in ["strip", "dial1", "dial2"] {
-        assert!(status.get(key).is_none(), "{key} must be removed");
-    }
-    assert_eq!(status["key1_1"], "K");
-}
-
-#[test]
-fn apply_refuses_a_newer_frame_and_leaves_the_file_alone() {
-    let env = Env::new();
-    let before = r#"{"dial1":"keep"}"#;
-    fs::write(&env.status, before).unwrap();
-
-    let output = run_stdin(
-        &env,
-        ["apply-zellij", "--view", "deck"],
-        "{\"v\":2,\"type\":\"deck\",\"full\":true,\"set\":{\"dial1\":\"changed\"}}\n",
-    );
-    assert_eq!(output.status.code(), Some(2));
-    assert_eq!(env.status_text(), before);
-}
-
-#[test]
 fn apply_skips_garbage_lines_and_keeps_going() {
     let env = Env::new();
-    let input = concat!(
-        "not json\n",
-        r#"{"v":1,"type":"deck","set":{"dial1":"one"}}"#,
-        "\n",
-        "[1,2,3]\n",
-        r#"{"v":1,"type":"deck","set":{"dial2":"two"}}"#,
-        "\n"
-    );
-    let output = run_stdin(&env, ["apply-zellij", "--view", "deck"], input);
+    let input = format!("not json\n[1,2,3]\n{}\n", state_line(1));
+    let output = run_stdin(&env, ["apply-zellij"], &input);
     assert!(output.status.success());
-    let status = env.status_json();
-    assert_eq!(status["dial1"], "one");
-    assert_eq!(status["dial2"], "two");
+    assert!(env.status_json().get("strip").is_some());
 }
 
 #[test]
-fn apply_ignores_known_non_deck_types_and_unknown_types() {
+fn apply_ignores_lines_that_carry_no_document() {
     let env = Env::new();
     let before = r#"{"dial1":"keep"}"#;
     fs::write(&env.status, before).unwrap();
@@ -914,12 +850,12 @@ fn apply_ignores_known_non_deck_types_and_unknown_types() {
         "\n",
         r#"{"v":1,"type":"ping"}"#,
         "\n",
-        r#"{"v":1,"type":"state","doc":{}}"#,
+        r#"{"v":1,"type":"deck","set":{"dial1":"changed"}}"#,
         "\n",
         r#"{"v":1,"type":"something_new"}"#,
         "\n"
     );
-    let output = run_stdin(&env, ["apply-zellij", "--view", "deck"], input);
+    let output = run_stdin(&env, ["apply-zellij"], input);
     assert!(output.status.success());
     assert_eq!(env.status_text(), before);
 }
@@ -927,7 +863,7 @@ fn apply_ignores_known_non_deck_types_and_unknown_types() {
 #[test]
 fn apply_idle_clear_removes_the_owned_slots() {
     let env = Env::new();
-    let mut child = apply_until_idle_clear(&env, FULL_FRAME);
+    let mut child = apply_until_idle_clear(&env, &(state_line(1) + "\n"));
     let _ = child.kill();
     let _ = child.wait();
 }
@@ -936,13 +872,9 @@ fn apply_idle_clear_removes_the_owned_slots() {
 fn zero_second_durations_are_usage_errors() {
     let env = Env::new();
     assert_eq!(
-        run_stdin(
-            &env,
-            ["apply-zellij", "--idle-clear", "0", "--view", "deck"],
-            ""
-        )
-        .status
-        .code(),
+        run_stdin(&env, ["apply-zellij", "--idle-clear", "0"], "")
+            .status
+            .code(),
         Some(2)
     );
     assert_eq!(
@@ -953,28 +885,26 @@ fn zero_second_durations_are_usage_errors() {
     );
 }
 
-/// What `apply-zellij --idle-clear` must leave alone: a slot nobody owns, a setting the
-/// frame did not carry and the settings it did.
+/// What `apply-zellij --idle-clear` must leave alone: a slot and a setting the
+/// writer does not own, and the strip mode it announced.
 fn assert_unowned_state_survives(env: &Env) {
     let status = env.status_json();
     assert_eq!(status["key1_1"], "K", "a foreign slot survives");
     assert_eq!(status["brightness"], 7, "a foreign setting survives");
-    assert_eq!(status["strip_mode"], "tiles", "a frame setting survives");
-    assert_eq!(status["strip_gap"], 12);
-    assert_eq!(status["labels"], Value::Bool(true));
+    assert_eq!(status["strip_mode"], "raw", "the strip mode survives");
     for slot in ["strip", "dial1", "dial2", "dial3"] {
         assert!(slot_gone(&status, slot), "{slot} is owned and cleared");
     }
 }
 
-const SEEDED_STATUS: &str = r#"{"key1_1":"K","brightness":7}"#;
+const SEEDED_STATUS: &str = r#"{"key1_1":"K","brightness":7,"dial2":"b","dial3":"c"}"#;
 
 #[test]
 fn apply_idle_clear_removes_only_the_owned_slots() {
     let env = Env::new();
     fs::write(&env.status, SEEDED_STATUS).unwrap();
 
-    let mut child = apply_until_idle_clear(&env, FULL_FRAME);
+    let mut child = apply_until_idle_clear(&env, &(state_line(1) + "\n"));
     assert_unowned_state_survives(&env);
     let _ = child.kill();
     let _ = child.wait();
@@ -985,7 +915,7 @@ fn apply_idle_clear_clears_once_and_keeps_reading() {
     let env = Env::new();
     fs::write(&env.status, SEEDED_STATUS).unwrap();
 
-    let mut child = apply_until_idle_clear(&env, FULL_FRAME);
+    let mut child = apply_until_idle_clear(&env, &(state_line(1) + "\n"));
 
     // Cleared once per silent stretch: the next interval must not clear again.
     env.run_ok(["set", "dial1", "manual"]);
@@ -998,67 +928,22 @@ fn apply_idle_clear_clears_once_and_keeps_reading() {
     {
         use std::io::Write;
         let stdin = child.stdin.as_mut().expect("stdin is piped");
-        writeln!(
-            stdin,
-            r#"{{"v":1,"type":"deck","seq":2,"full":false,"set":{{"dial2":"after"}},"settings":{{}},"clear":[]}}"#
-        )
-        .unwrap();
+        writeln!(stdin, "{}", state_line(2)).unwrap();
         stdin.flush().unwrap();
     }
     assert!(
-        wait_for_status(&env, Duration::from_secs(5), |status| status["dial2"]
-            == "after"),
-        "a frame after the clear is still applied"
+        wait_for_slot(&env, "strip", Duration::from_secs(5)).is_some(),
+        "the same state is written again after the clear"
     );
     assert_eq!(
         env.status_json()["dial1"],
         "manual",
-        "the delta sets only dial2"
+        "a state writes only the strip"
     );
 
     drop(child.stdin.take());
     let status = wait_for_exit(&mut child, Duration::from_secs(10)).expect("apply exits at EOF");
     assert_eq!(status.code(), Some(0));
-}
-
-#[test]
-fn apply_applies_a_delta_after_a_seq_gap_and_exits_zero() {
-    let env = Env::new();
-    let input = concat!(
-        r#"{"v":1,"type":"hello","seq":0}"#,
-        "\n",
-        r#"{"v":1,"type":"deck","seq":1,"full":true,"set":{"dial1":"one"},"owned":["dial1"]}"#,
-        "\n",
-        r#"{"v":1,"type":"deck","seq":3,"full":false,"set":{"dial2":"two"}}"#,
-        "\n"
-    );
-    let output = run_stdin(&env, ["apply-zellij", "--view", "deck"], input);
-    assert_eq!(output.status.code(), Some(0));
-    let status = env.status_json();
-    assert_eq!(status["dial1"], "one");
-    assert_eq!(
-        status["dial2"], "two",
-        "the delta is applied, never dropped or taken as full"
-    );
-}
-
-#[test]
-fn apply_skips_a_deck_line_with_a_non_boolean_full() {
-    let env = Env::new();
-    let input = concat!(
-        r#"{"v":1,"type":"deck","seq":1,"full":"true","set":{"dial1":"one"},"owned":["dial1"]}"#,
-        "\n",
-        r#"{"v":1,"type":"deck","seq":2,"full":false,"set":{"dial2":"two"}}"#,
-        "\n"
-    );
-    let output = run_stdin(&env, ["apply-zellij", "--view", "deck"], input);
-    assert_eq!(output.status.code(), Some(0));
-    let status = env.status_json();
-    assert!(
-        status.get("dial1").is_none(),
-        "the mis-typed frame is skipped"
-    );
-    assert_eq!(status["dial2"], "two");
 }
 
 #[cfg(unix)]
@@ -1094,10 +979,7 @@ case "$1" in
       echo "wrong session $2" >&2
       exit 1
     fi
-    printf '%s\n' \
-      '{"v":1,"type":"hello","plugin":"zj-status-export","version":"0.1.0","session":"work","view":"deck","seq":0}' \
-      '{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"D1"},"settings":{"strip_mode":"tiles"},"clear":[],"owned":["strip","dial1","dial2","dial3","dial4"]}' \
-      '{"v":1,"type":"ping","seq":2}'
+    printf '%s\n' "$FAKE_STATE" '{"v":1,"type":"ping","seq":2}'
     exit 0
     ;;
 esac
@@ -1106,15 +988,16 @@ exit 1
 
 #[cfg(unix)]
 #[test]
-fn follow_once_applies_frames_from_a_fake_zellij() {
+fn follow_once_applies_a_state_from_a_fake_zellij() {
     let env = Env::new();
     let bin = env.path("bin");
     fs::create_dir_all(&bin).unwrap();
     write_fake_zellij(&bin, FAKE_ZELLIJ);
 
     let output = env
-        .command(["follow-zellij", "--once", "--view", "deck"])
+        .command(["follow-zellij", "--once"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .output()
         .expect("run follow");
     assert!(
@@ -1125,18 +1008,17 @@ fn follow_once_applies_frames_from_a_fake_zellij() {
     );
 
     let status = env.status_json();
-    assert_eq!(status["strip"], "S");
-    assert_eq!(status["dial1"], "D1");
-    assert_eq!(status["strip_mode"], "tiles");
+    assert!(status.get("strip").is_some());
+    assert_eq!(status["strip_mode"], "raw");
 }
 
-/// The one command `follow-zellij` starts: session, pipe name, deck view and the
+/// The one command `follow-zellij` starts: session, pipe name, state view and the
 /// payload that makes a held-open stdin invoke the plugin at all.
 #[cfg(unix)]
 fn assert_follow_argv(env: &Env) {
     assert_eq!(
         fs::read_to_string(env.path("argv")).unwrap(),
-        "--session\nwork\npipe\n--name\nzj-status-export.follow\n-a\nview=deck\nstart\n"
+        "--session\nwork\npipe\n--name\nzj-status-export.follow\n-a\nview=state\nstart\n"
     );
 }
 
@@ -1163,15 +1045,9 @@ fn follow_pinned_live_session_is_followed_with_the_documented_argv() {
     write_fake_zellij(&bin, FAKE_ZELLIJ);
 
     let output = env
-        .command([
-            "follow-zellij",
-            "--once",
-            "--session",
-            "work",
-            "--view",
-            "deck",
-        ])
+        .command(["follow-zellij", "--once", "--session", "work"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .env("FAKE_ARGV", env.path("argv"))
         .output()
         .expect("run follow");
@@ -1182,7 +1058,7 @@ fn follow_pinned_live_session_is_followed_with_the_documented_argv() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_follow_argv(&env);
-    assert_eq!(env.status_json()["strip"], "S");
+    assert!(env.status_json().get("strip").is_some());
 }
 
 /// A fake whose pipe prints nothing and fails at once; it counts its calls.
@@ -1222,16 +1098,9 @@ fn follow_backs_off_while_no_line_arrives() {
     write_silent_zellij(&bin);
     let calls = env.path("calls");
     let mut child = env
-        .command([
-            "follow-zellij",
-            "--view",
-            "deck",
-            "--retry-secs",
-            "1,3",
-            "--stall-secs",
-            "60",
-        ])
+        .command(["follow-zellij", "--retry-secs", "1,3", "--stall-secs", "60"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .env("FAKE_CALLS", &calls)
         .spawn()
         .expect("spawn follow");
@@ -1264,9 +1133,7 @@ case "$1" in
     n=$((n + 1))
     echo $n > "$FAKE_CALLS"
     if [ "$n" = 1 ]; then
-      printf '%s\n' \
-        '{"v":1,"type":"hello","seq":0}' \
-        '{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S"},"owned":["strip","dial1","dial2","dial3","dial4"]}'
+      printf '%s\n' "$FAKE_STATE"
     fi
     exit 1
     ;;
@@ -1277,22 +1144,14 @@ exit 1
     let calls = env.path("calls");
 
     let mut child = env
-        .command([
-            "follow-zellij",
-            "--view",
-            "deck",
-            "--stall-secs",
-            "1",
-            "--retry-secs",
-            "1,2",
-        ])
+        .command(["follow-zellij", "--stall-secs", "1", "--retry-secs", "1,2"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .env("FAKE_CALLS", &calls)
         .spawn()
         .expect("spawn follow");
-    assert_eq!(
-        wait_for_slot(&env, "strip", Duration::from_secs(5)).as_deref(),
-        Some("S"),
+    assert!(
+        wait_for_slot(&env, "strip", Duration::from_secs(5)).is_some(),
         "the first connection applies its frame"
     );
     let cleared = wait_for_status(&env, Duration::from_secs(8), |status| {
@@ -1331,9 +1190,7 @@ case "$1" in
     n=$((n + 1))
     echo $n > "$FAKE_CALLS"
     if [ "$n" = 1 ]; then
-      printf '%s\n' \
-        '{"v":1,"type":"hello","seq":0}' \
-        '{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S"},"owned":["strip","dial1","dial2","dial3","dial4"]}'
+      printf '%s\n' "$FAKE_STATE"
       exit 0
     fi
     exec sleep 100
@@ -1345,16 +1202,9 @@ exit 1
     let calls = env.path("calls");
 
     let mut child = env
-        .command([
-            "follow-zellij",
-            "--view",
-            "deck",
-            "--stall-secs",
-            "2",
-            "--retry-secs",
-            "3,3",
-        ])
+        .command(["follow-zellij", "--stall-secs", "2", "--retry-secs", "3,3"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .env("FAKE_CALLS", &calls)
         .spawn()
         .expect("spawn follow");
@@ -1382,74 +1232,6 @@ exit 1
 
 #[cfg(unix)]
 #[test]
-fn follow_seq_gap_reconnects_without_applying_the_delta() {
-    let env = Env::new();
-    let bin = fake_bin(&env);
-    write_fake_zellij(
-        &bin,
-        r#"#!/bin/sh
-case "$1" in
-  list-sessions)
-    echo "work [Created 1m ago]"
-    exit 0
-    ;;
-  --session)
-    n=$(cat "$FAKE_CALLS" 2>/dev/null || echo 0)
-    n=$((n + 1))
-    echo $n > "$FAKE_CALLS"
-    if [ "$n" = 1 ]; then
-      printf '%s\n' \
-        '{"v":1,"type":"hello","seq":0}' \
-        '{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"D1"},"owned":["strip","dial1"]}' \
-        '{"v":1,"type":"deck","seq":5,"full":false,"set":{"dial2":"LOST"}}'
-    else
-      printf '%s\n' \
-        '{"v":1,"type":"hello","seq":0}' \
-        '{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"again"},"owned":["strip","dial1"]}'
-    fi
-    exec sleep 100
-    ;;
-esac
-exit 1
-"#,
-    );
-    let calls = env.path("calls");
-
-    let mut child = env
-        .command([
-            "follow-zellij",
-            "--view",
-            "deck",
-            "--retry-secs",
-            "1,1",
-            "--stall-secs",
-            "60",
-        ])
-        .env("PATH", fake_path(&bin))
-        .env("FAKE_CALLS", &calls)
-        .spawn()
-        .expect("spawn follow");
-    let reconnected = wait_for_status(&env, Duration::from_secs(10), |status| {
-        status["dial1"] == "again"
-    });
-    let exit = if reconnected {
-        Some(stop_follow(&mut child))
-    } else {
-        let _ = child.kill();
-        let _ = child.wait();
-        None
-    };
-    assert!(reconnected, "a seq gap ends the connection and reconnects");
-    assert!(exit.expect("stopped").success());
-    let status = env.status_json();
-    assert!(
-        slot_gone(&status, "dial2"),
-        "the delta after the gap is not applied"
-    );
-}
-
-#[cfg(unix)]
-#[test]
 fn follow_pinned_dead_session_clears_after_the_grace_period() {
     let env = Env::new();
     let bin = fake_bin(&env);
@@ -1464,7 +1246,7 @@ case "$1" in
     exit 0
     ;;
   --session)
-    printf '%s\n' '{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S","dial1":"D1"},"owned":["strip","dial1","dial2","dial3","dial4"]}'
+    printf '%s\n' "$FAKE_STATE"
     while [ ! -e "$FAKE_GONE" ]; do sleep 0.1; done
     exit 0
     ;;
@@ -1477,8 +1259,6 @@ exit 1
     let mut child = env
         .command([
             "follow-zellij",
-            "--view",
-            "deck",
             "--session",
             "work",
             "--grace-secs",
@@ -1487,12 +1267,12 @@ exit 1
             "1,5",
         ])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .env("FAKE_GONE", &gone)
         .spawn()
         .expect("spawn follow");
-    assert_eq!(
-        wait_for_slot(&env, "strip", Duration::from_secs(5)).as_deref(),
-        Some("S"),
+    assert!(
+        wait_for_slot(&env, "strip", Duration::from_secs(5)).is_some(),
         "the pinned session is followed while it is live"
     );
     // The session goes away: its pipe ends and it is no longer listed.
@@ -1532,7 +1312,7 @@ case "$1" in
     exit 0
     ;;
   --session)
-    printf '%s\n' '{"v":1,"type":"deck","seq":1,"full":true,"set":{"strip":"S"},"owned":["strip"]}'
+    printf '%s\n' "$FAKE_STATE"
     exec sleep 100
     ;;
 esac
@@ -1541,8 +1321,9 @@ exit 1
     );
 
     let mut child = env
-        .command(["follow-zellij", "--view", "deck", "--retry-secs", "1,1"])
+        .command(["follow-zellij", "--retry-secs", "1,1"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .env("FAKE_READY", &ready)
         .spawn()
         .expect("spawn follow");
@@ -1565,7 +1346,7 @@ exit 1
 
 #[cfg(unix)]
 #[test]
-fn follow_once_exits_one_when_no_frame_lands() {
+fn follow_once_exits_one_when_no_state_lands() {
     let env = Env::new();
     let bin = fake_bin(&env);
     write_fake_zellij(
@@ -1584,8 +1365,9 @@ exit 1
 "#,
     );
     let output = env
-        .command(["follow-zellij", "--once", "--view", "deck"])
+        .command(["follow-zellij", "--once"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .output()
         .expect("run follow");
     assert_eq!(
@@ -1607,8 +1389,9 @@ exit 1
 "#,
     );
     let output = env
-        .command(["follow-zellij", "--once", "--view", "deck"])
+        .command(["follow-zellij", "--once"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .output()
         .expect("run follow");
     assert_eq!(output.status.code(), Some(1), "no live session exits 1");
@@ -1632,7 +1415,7 @@ case "$1" in
     ;;
   --session)
     echo "$2" > "$FAKE_SESSION_FILE"
-    printf '%s\n' '{"v":1,"type":"deck","full":true,"set":{"dial1":"picked"},"owned":["dial1"]}'
+    printf '%s\n' "$FAKE_STATE"
     exit 0
     ;;
 esac
@@ -1642,8 +1425,9 @@ exit 1
 
     // The live `$ZELLIJ_SESSION_NAME` wins over the first live line ("work").
     let output = env
-        .command(["follow-zellij", "--once", "--view", "deck"])
+        .command(["follow-zellij", "--once"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .env("ZELLIJ_SESSION_NAME", "other")
         .env("FAKE_SESSION_FILE", &chosen)
         .output()
@@ -1655,7 +1439,7 @@ exit 1
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(fs::read_to_string(&chosen).unwrap().trim(), "other");
-    assert_eq!(env.status_json()["dial1"], "picked");
+    assert!(env.status_json().get("strip").is_some());
 }
 
 #[cfg(unix)]
@@ -1674,7 +1458,7 @@ case "$1" in
     exit 0
     ;;
   --session)
-    printf '%s\n' '{"v":1,"type":"deck","full":true,"set":{"strip":"S","dial1":"D1"},"owned":["strip","dial1","dial2","dial3","dial4"]}'
+    printf '%s\n' "$FAKE_STATE"
     exec sleep 100
     ;;
 esac
@@ -1683,13 +1467,13 @@ exit 1
     );
 
     let mut child = env
-        .command(["follow-zellij", "--view", "deck", "--clear-on-exit"])
+        .command(["follow-zellij", "--clear-on-exit"])
         .env("PATH", fake_path(&bin))
+        .env("FAKE_STATE", state_line(1))
         .spawn()
         .expect("spawn follow");
-    assert_eq!(
-        wait_for_slot(&env, "strip", Duration::from_secs(5)).as_deref(),
-        Some("S"),
+    assert!(
+        wait_for_slot(&env, "strip", Duration::from_secs(5)).is_some(),
         "the frame is applied before the signal"
     );
 
